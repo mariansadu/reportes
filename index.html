@@ -711,16 +711,28 @@ function getFiltered() {
 
 
 function imgCells(skus){
+  var servers=['ss701','ss702','ss703','ss704','ss705','ss706','ss707','ss708'];
   return (skus||'').split('|').map(function(s){
     s=s.trim();
     if(!s) return '';
+    var wrap=document.createElement('div');
+    wrap.style.cssText='width:44px;height:44px;border-radius:6px;overflow:hidden;border:0.5px solid rgba(96,121,191,0.15);background:#f5f5f5;flex-shrink:0';
     var img=document.createElement('img');
-    img.style.cssText='width:44px;height:44px;object-fit:cover;border-radius:6px;border:0.5px solid rgba(96,121,191,0.15);background:#f5f5f5';
-    img.src='https://ss701.liverpool.com.mx/lg/'+s+'.jpg';
+    img.style.cssText='width:44px;height:44px;object-fit:cover';
     img.referrerPolicy='no-referrer';
     img.loading='lazy';
-    img.onerror=function(){this.style.display='none'};
-    return img.outerHTML;
+    var si=0;
+    img.src='https://'+servers[si]+'.liverpool.com.mx/lg/'+s+'.jpg';
+    img.onerror=function(){
+      si++;
+      if(si<servers.length){
+        this.src='https://'+servers[si]+'.liverpool.com.mx/lg/'+s+'.jpg';
+      } else {
+        wrap.style.display='none';
+      }
+    };
+    wrap.appendChild(img);
+    return wrap.outerHTML;
   }).join('');
 }
 function renderTable() {
@@ -784,7 +796,7 @@ function renderTable() {
         <td><a class="order-link" href="${o.url}" target="_blank" onclick="event.stopPropagation()">${o.id}</a></td>
         <td style="padding:4px 6px">
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-            ${imgCells(o.sku_liv||o.img)}
+            ${imgCells(o.sku)}
           </div>
         </td>
         <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.producto}">${multiBadge}${o.producto}</td>
