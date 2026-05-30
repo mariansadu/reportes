@@ -385,6 +385,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <th style="width:40px"></th>
           <th style="width:40px;cursor:default">✓</th>
           <th style="cursor:pointer" onclick="setSortCol('id')">Pedido <span id="sh-id"></span></th>
+          <th style="width:100px">Imagen</th>
           <th style="cursor:pointer" onclick="setSortCol('producto')">Producto <span id="sh-producto"></span></th>
           <th style="cursor:pointer" onclick="setSortCol('marca')">Marca <span id="sh-marca"></span></th>
           <th style="cursor:pointer" onclick="setSortCol('sku')">SKU <span id="sh-sku"></span></th>
@@ -708,6 +709,19 @@ function getFiltered() {
   });
 }
 
+
+function imgCells(skus){
+  return (skus||'').split('|').map(function(s){
+    s=s.trim();
+    if(!s) return '';
+    var img=document.createElement('img');
+    img.style.cssText='width:44px;height:44px;object-fit:cover;border-radius:6px;border:0.5px solid rgba(96,121,191,0.15);background:#f5f5f5';
+    img.src='https://images.weserv.nl/?url=ss701.liverpool.com.mx/lg/'+s+'&w=88&h=88&fit=cover';
+    img.loading='lazy';
+    img.onerror=function(){this.style.display='none'};
+    return img.outerHTML;
+  }).join('');
+}
 function renderTable() {
   const filtered=sortData(getFiltered());
   document.getElementById('countLabel').textContent=filtered.length.toLocaleString();
@@ -767,13 +781,12 @@ function renderTable() {
           </button>
         </td>
         <td><a class="order-link" href="${o.url}" target="_blank" onclick="event.stopPropagation()">${o.id}</a></td>
-        <td style="max-width:260px" title="${o.producto}">
-          <div class="prod-cell">
-            <img class="prod-img" src="https://images.weserv.nl/?url=ss701.liverpool.com.mx/lg/${o.img}&w=80&h=80&fit=cover"
-              onerror="this.style.display='none'" loading="lazy" alt="">
-            <span class="prod-name">${multiBadge}${o.producto}</span>
+        <td style="padding:4px 6px">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            ${imgCells(o.sku_liv||o.img)}
           </div>
         </td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.producto}">${multiBadge}${o.producto}</td>
         <td>${o.marca||'—'}</td>
         <td><span class="mono" style="font-size:10px">${o.sku}</span></td>
         <td style="text-align:center;font-weight:600">${o.cantidad}</td>
@@ -786,7 +799,7 @@ function renderTable() {
             ${daysStr}
           </div>
         </td>
-        <td><span class="prio prio-${o.prioridad}">${PRIO_LABEL[o.prioridad]} ${PRIO_TEXT[o.prioridad]}</span></td>
+        <td><span class="prio prio-${o.prioridad}">${PRIO_LABEL[o.prioridad]||o.prioridad}</span></td>
       </tr>
       ${expandHtml}`;
   }).join('');
