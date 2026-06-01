@@ -802,12 +802,13 @@ function renderTable() {
     return `
       <tr onclick="toggleRow('${o.id}')" class="${isExp?'expanded':''}${isDone?' procesado-row':''}${multiClass}">
         <td style="text-align:center"><span style="color:var(--text-2);font-size:13px">${isExp?'▼':'▶'}</span></td>
-        <td style="text-align:center">
+        <td style="text-align:center;min-width:52px">
           <button class="check-btn ${isDone?'checked':''}"
             onclick="toggleProcessed('${o.id}',event)"
             title="${isDone?'Marcar como pendiente':'Marcar como procesado'}">
             ${isDone?'✓':''}
           </button>
+          ${isDone && PROCESSED_BY[o.id] ? `<div style="font-size:9px;color:#6079BF;line-height:1.3;margin-top:3px;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${PROCESSED_BY[o.id].nombre}&#10;${PROCESSED_BY[o.id].hora}">${PROCESSED_BY[o.id].nombre}<br><span style="color:#aaa">${(PROCESSED_BY[o.id].hora||'').slice(11,16)}</span></div>` : ''}
         </td>
         <td><a class="order-link" href="${o.url}" target="_blank" onclick="event.stopPropagation()">${o.id}</a></td>
         <td style="padding:4px 6px">
