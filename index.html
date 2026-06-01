@@ -466,49 +466,43 @@ function setSyncStatus(state, msg) {
   lbl.textContent = msg;
 }
 
-async function syncFromServer() {
-  if(!SCRIPT_URL) {
-    // Fallback to localStorage only
+function syncFromServer() {
+  setSyncStatus('syncing','Sincronizando...');
+  const cbName = 'biubox_cb_' + Date.now();
+  const script = document.createElement('script');
+  const timer = setTimeout(() => {
+    script.remove(); delete window[cbName];
     const local = localStorage.getItem(TODAY_KEY);
     if(local) PROCESSED = new Set(JSON.parse(local));
-    setSyncStatus('', '⚠️ Sin servidor — guardando solo en esta compu. Configura sync para compartir entre compus.');
+    setSyncStatus('error','Sin conexión — datos locales');
     updateProgress(); renderTable();
-    return;
-  }
-  setSyncStatus('syncing','Sincronizando...');
-  try {
-    const res = await fetch(SCRIPT_URL + '?action=get&key=' + TODAY_KEY, {mode:'cors'});
-    const data = await res.json();
-    if(data.ordenes) {
-      PROCESSED.clear();
-      PROCESSED_BY = {};
+  }, 8000);
+  window[cbName] = function(data) {
+    clearTimeout(timer); script.remove(); delete window[cbName];
+    if(data && data.ordenes) {
+      PROCESSED.clear(); PROCESSED_BY = {};
       Object.entries(data.ordenes).forEach(([id, info]) => {
-        if(info.procesado) {
-          PROCESSED.add(id);
-          PROCESSED_BY[id] = info;
-        }
+        if(info.procesado) { PROCESSED.add(id); PROCESSED_BY[id] = info; }
       });
       localStorage.setItem(TODAY_KEY, JSON.stringify([...PROCESSED]));
     }
-    setSyncStatus('ok', 'Sincronizado · ' + new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
+    setSyncStatus('ok','Sincronizado · '+new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
     updateProgress(); renderTable();
-  } catch(e) {
-    setSyncStatus('error','Error de sincronización — guardando localmente');
-  }
+  };
+  script.src = SCRIPT_URL+'?action=get&key='+encodeURIComponent(TODAY_KEY)+'&callback='+cbName;
+  document.head.appendChild(script);
 }
 
-async function pushToServer(ids, changedOrderId, isProcessed) {
+function pushToServer(ids, changedOrderId, isProcessed) {
   localStorage.setItem(TODAY_KEY, JSON.stringify([...ids]));
   if(!SCRIPT_URL || !changedOrderId) return;
-  try {
-    const url = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
-      '&orderId=' + encodeURIComponent(changedOrderId) +
-      '&procesado=' + (isProcessed ? 'true' : 'false');
-    await fetch(url, {mode:'cors'});
-    setSyncStatus('ok','Guardado · '+new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
-  } catch(e) {
-    setSyncStatus('error','Error al guardar · cambios guardados localmente');
-  }
+  const script = document.createElement('script');
+  script.src = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
+    '&orderId=' + encodeURIComponent(changedOrderId) +
+    '&procesado=' + (isProcessed ? 'true' : 'false');
+  script.onload = () => { script.remove(); setTimeout(syncFromServer, 1000); };
+  script.onerror = () => { script.remove(); };
+  document.head.appendChild(script);
 }
 
 // ── TOGGLE PROCESSED ──────────────────────────────────────────────────
@@ -519,7 +513,7 @@ async function toggleProcessed(orderId, event) {
 
   const isNowProcessed = !PROCESSED.has(orderId);
   if(isNowProcessed) { PROCESSED.add(orderId); } else { PROCESSED.delete(orderId); delete PROCESSED_BY[orderId]; }
-  await pushToServer(PROCESSED, orderId, isNowProcessed);
+  pushToServer(PROCESSED, orderId, isNowProcessed);
   btn.classList.remove('syncing-btn');
   updateProgress();
   renderTable();
