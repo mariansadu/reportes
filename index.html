@@ -479,8 +479,15 @@ async function syncFromServer() {
   try {
     const res = await fetch(SCRIPT_URL + '?action=get&key=' + TODAY_KEY, {mode:'cors'});
     const data = await res.json();
-    if(data.ids) {
-      PROCESSED = new Set(data.ids);
+    if(data.ordenes) {
+      PROCESSED.clear();
+      PROCESSED_BY = {};
+      Object.entries(data.ordenes).forEach(([id, info]) => {
+        if(info.procesado) {
+          PROCESSED.add(id);
+          PROCESSED_BY[id] = info;
+        }
+      });
       localStorage.setItem(TODAY_KEY, JSON.stringify([...PROCESSED]));
     }
     setSyncStatus('ok', 'Sincronizado · ' + new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
@@ -490,20 +497,16 @@ async function syncFromServer() {
   }
 }
 
-async function pushToServer(ids) {
-  if(!SCRIPT_URL) {
-    localStorage.setItem(TODAY_KEY, JSON.stringify([...ids]));
-    return;
-  }
+async function pushToServer(ids, changedOrderId, isProcessed) {
+  localStorage.setItem(TODAY_KEY, JSON.stringify([...ids]));
+  if(!SCRIPT_URL || !changedOrderId) return;
   try {
-    await fetch(SCRIPT_URL, {
-      method:'POST', mode:'cors',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'set', key:TODAY_KEY, ids:[...ids]})
-    });
+    const url = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
+      '&orderId=' + encodeURIComponent(changedOrderId) +
+      '&procesado=' + (isProcessed ? 'true' : 'false');
+    await fetch(url, {mode:'cors'});
     setSyncStatus('ok','Guardado · '+new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
   } catch(e) {
-    localStorage.setItem(TODAY_KEY, JSON.stringify([...ids]));
     setSyncStatus('error','Error al guardar · cambios guardados localmente');
   }
 }
@@ -514,14 +517,9 @@ async function toggleProcessed(orderId, event) {
   const btn = event.currentTarget;
   btn.classList.add('syncing-btn');
 
-  if(PROCESSED.has(orderId)) {
-    PROCESSED.delete(orderId);
-  } else {
-    PROCESSED.add(orderId);
-  }
-
-  localStorage.setItem(TODAY_KEY, JSON.stringify([...PROCESSED]));
-  await pushToServer(PROCESSED);
+  const isNowProcessed = !PROCESSED.has(orderId);
+  if(isNowProcessed) { PROCESSED.add(orderId); } else { PROCESSED.delete(orderId); delete PROCESSED_BY[orderId]; }
+  await pushToServer(PROCESSED, orderId, isNowProcessed);
   btn.classList.remove('syncing-btn');
   updateProgress();
   renderTable();
