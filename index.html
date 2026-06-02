@@ -442,7 +442,7 @@ let RECEIVED = {}; // {orderId: {sku: countReceived}} // sortDir: 1=asc, -1=desc
 let PROCESSED = new Set();   // order IDs marked as processed
 let SCRIPT_URL = 'https://script.google.com/a/macros/biubox.com.mx/s/AKfycbxEv0eFF9vkxL0S6M7eAf8qcmYzQxewlrNMT1JZp2_UZUu31vkBYbafCVkkthWqSCib/exec';
 let syncInterval = null;
-const TODAY_KEY = 'biubox_processed_' + new Date().toISOString().slice(0,10);
+const TODAY_KEY = 'biubox_processed_2026-06-01'; // fecha del reporte
 
 // ── MODAL ─────────────────────────────────────────────────────────────
 function openModal() {
@@ -1024,8 +1024,6 @@ function toggleRow(id){
   expandedId=expandedId===id?null:id;
   renderTable();
   if(expandedId) loadHistorial(expandedId);
-  // Re-delegate events after render
-  setupRecvDelegation();
 }
 
 
