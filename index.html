@@ -436,7 +436,7 @@ let activeFilter='VENCIDO', statusFilter='ALL', searchTerm='', expandedId=null;
 let sortCol=null, sortDir=1;
 let PROCESSED_BY = {};
 let CURRENT_USER = {nombre:'Colaborador', email:''};
-let RECEIVED = {}; // {orderId: Set of received SKUs} // sortDir: 1=asc, -1=desc
+let RECEIVED = {}; // {orderId: {sku: countReceived}} // sortDir: 1=asc, -1=desc
 
 // ── SYNC STATE ────────────────────────────────────────────────────────
 let PROCESSED = new Set();   // order IDs marked as processed
@@ -500,15 +500,12 @@ function syncFromServer() {
       // Sync recibidos
       if(data.recibidos) {
         Object.entries(data.recibidos).forEach(([orderId, skus]) => {
-          if(!RECEIVED[orderId]) RECEIVED[orderId] = new Set();
+          if(!RECEIVED[orderId]) RECEIVED[orderId] = {};
           Object.entries(skus).forEach(([sku, info]) => {
-            if(info.recibido) RECEIVED[orderId].add(sku);
-            else RECEIVED[orderId].delete(sku);
+            RECEIVED[orderId][sku] = info.count || 0;
           });
         });
-        const savedReceived = {};
-        Object.keys(RECEIVED).forEach(k => { savedReceived[k] = [...RECEIVED[k]]; });
-        localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(savedReceived));
+        localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(RECEIVED));
       }
     }
     setSyncStatus('ok','Sincronizado · '+new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
@@ -772,21 +769,21 @@ function getInitials(nombre, email) {
   return parts[0][0].toUpperCase();
 }
 
-function toggleReceived(orderId, sku, event) {
+function toggleReceived(orderId, sku, qty, event) {
   event.stopPropagation();
-  if(!RECEIVED[orderId]) RECEIVED[orderId] = new Set();
-  const isNowReceived = !RECEIVED[orderId].has(sku);
-  if(isNowReceived) { RECEIVED[orderId].add(sku); } else { RECEIVED[orderId].delete(sku); }
+  if(!RECEIVED[orderId]) RECEIVED[orderId] = {};
+  const current = RECEIVED[orderId][sku] || 0;
+  // Cycle: 0 → 1 → 2 → ... → qty → 0
+  const next = current >= qty ? 0 : current + 1;
+  RECEIVED[orderId][sku] = next;
   // Save to localStorage
-  const savedReceived = {};
-  Object.keys(RECEIVED).forEach(k => { savedReceived[k] = [...RECEIVED[k]]; });
-  localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(savedReceived));
+  localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(RECEIVED));
   // Sync with server
-  pushRecibido(orderId, sku, isNowReceived);
+  pushRecibido(orderId, sku, next, qty);
   renderTable();
 }
 
-function pushRecibido(orderId, sku, recibido) {
+function pushRecibido(orderId, sku, count, total) {
   if(!SCRIPT_URL) return;
   const cbName = 'biubox_recv_' + Date.now();
   const script = document.createElement('script');
@@ -794,7 +791,7 @@ function pushRecibido(orderId, sku, recibido) {
   script.src = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(orderId) +
     '&sku=' + encodeURIComponent(sku) +
-    '&recibido=' + recibido + '&callback=' + cbName;
+    '&count=' + count + '&total=' + total + '&callback=' + cbName;
   script.onerror = () => { script.remove(); delete window[cbName]; };
   document.head.appendChild(script);
 }
@@ -802,8 +799,7 @@ function pushRecibido(orderId, sku, recibido) {
 function loadReceived() {
   const saved = localStorage.getItem('biubox_received_' + TODAY_KEY);
   if(saved) {
-    const data = JSON.parse(saved);
-    Object.keys(data).forEach(k => { RECEIVED[k] = new Set(data[k]); });
+    try { RECEIVED = JSON.parse(saved); } catch(e) {}
   }
 }
 
@@ -815,13 +811,16 @@ function imgCells(items, orderId){
     var s=String(item.s||'').trim();
     var q=item.q||1;
     if(!s) return '';
-    var isReceived = RECEIVED[oid] && RECEIVED[oid].has(s);
-    var borderColor = items.length > 1 ? (isReceived ? '2px solid #00B894' : '2px solid #D63031') : '0.5px solid rgba(96,121,191,0.15)';
+    var recvCount = (RECEIVED[oid] && RECEIVED[oid][s]) ? RECEIVED[oid][s] : 0;
+    var isMultiQty = items.length > 1 || q > 1;
+    var allReceived = recvCount >= q;
+    var partialReceived = recvCount > 0 && recvCount < q;
+    var borderColor = isMultiQty ? (allReceived ? '2px solid #00B894' : partialReceived ? '2px solid #0084FF' : '2px solid #D63031') : '0.5px solid rgba(96,121,191,0.15)';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:inline-flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;cursor:'+(items.length>1?'pointer':'default');
-    if(items.length > 1) {
-      wrap.title = isReceived ? 'Recibido — clic para desmarcar' : 'Pendiente — clic para marcar como recibido';
-      wrap.setAttribute('onclick', 'toggleReceived("'+oid+'","'+s+'",event)');
+    wrap.style.cssText='display:inline-flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;cursor:'+(isMultiQty?'pointer':'default');
+    if(isMultiQty) {
+      wrap.title = allReceived ? 'Todos recibidos — clic para reiniciar' : 'Clic para marcar unidades recibidas ('+recvCount+'/'+q+')';
+      wrap.setAttribute('onclick', 'toggleReceived("'+oid+'","'+s+'",'+q+',event)');
     }
     var imgWrap=document.createElement('div');
     imgWrap.style.cssText='width:44px;height:44px;border-radius:6px;overflow:hidden;border:'+borderColor+';background:#f5f5f5;transition:border .2s';
@@ -847,8 +846,13 @@ function imgCells(items, orderId){
     wrap.appendChild(imgWrap);
     // Qty badge under image
     var badge=document.createElement('span');
-    badge.textContent='×'+q;
-    badge.style.cssText='font-size:10px;font-weight:600;color:#6079BF;line-height:1';
+    if(isMultiQty && recvCount > 0) {
+      badge.textContent= recvCount+'/'+q;
+      badge.style.cssText='font-size:10px;font-weight:700;color:'+(allReceived?'#00B894':partialReceived?'#0084FF':'#D63031')+';line-height:1';
+    } else {
+      badge.textContent='×'+q;
+      badge.style.cssText='font-size:10px;font-weight:600;color:#6079BF;line-height:1';
+    }
     wrap.appendChild(badge);
     return wrap.outerHTML;
   }).join('');
