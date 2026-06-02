@@ -550,7 +550,7 @@ function pushToServer(ids, changedOrderId, isProcessed) {
     '&procesado=' + (isProcessed ? 'true' : 'false') +
     '&nombre=' + encodeURIComponent(CURRENT_USER.nombre || 'Colaborador') +
     '&email=' + encodeURIComponent(CURRENT_USER.email || '');
-  fetch(serverUrl, {redirect: 'follow', mode: 'cors', credentials: 'include'})
+  fetch(serverUrl, {redirect: 'follow', mode: 'no-cors'})
     .then(function(r) { return r.text(); })
     .then(function(text) { setTimeout(syncFromServer, 500); })
     .catch(function() { setTimeout(syncFromServer, 1000); });
@@ -850,13 +850,12 @@ function pushRecibido(orderId, sku, count, total) {
     '&skuLabel=' + encodeURIComponent(sku) +
     '&nombre=' + encodeURIComponent(CURRENT_USER.nombre || 'Colaborador') +
     '&email=' + encodeURIComponent(CURRENT_USER.email || '');
-  fetch(url, {redirect: 'follow', mode: 'cors', credentials: 'include'})
-    .then(function(r) { return r.text(); })
+  fetch(url, {mode: 'no-cors'})
     .then(function() {
       setTimeout(function() {
         delete HISTORIAL_CACHE[orderId];
         if(expandedId === orderId) loadHistorial(orderId);
-      }, 500);
+      }, 1500);
     })
     .catch(function() {
       setTimeout(function() {
@@ -1085,7 +1084,15 @@ function renderHistorial(el, historial) {
       '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:'+bgColor+';color:#fff;font-size:8px;font-weight:700;flex-shrink:0">' + initials + '</span>' +
       '<span style="font-weight:600;color:var(--text);min-width:70px">' + h.nombre + '</span>' +
       '<span style="color:#555;font-size:11px">' + h.accion + '</span>' +
-      '<span style="margin-left:auto;color:#aaa;font-size:10px;white-space:nowrap">' + h.hora + '</span>' +
+      '<span style="margin-left:auto;color:#aaa;font-size:10px;white-space:nowrap">' + (function(h){
+  try {
+    if(h.includes('T') && h.includes('Z')) {
+      var d = new Date(h);
+      return d.toLocaleString('es-MX', {timeZone:'America/Mexico_City', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true});
+    }
+    return h;
+  } catch(e) { return h; }
+})(h.hora) + '</span>' +
       '</div>';
   }).join('');
 }
