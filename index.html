@@ -615,6 +615,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     fetchCurrentUser();
     // Load received items
     loadReceived();
+    // Event delegation for product image clicks
+    document.addEventListener('click', function(e) {
+      var el = e.target.closest('.recv-item');
+      if(el) {
+        e.stopPropagation();
+        e.preventDefault();
+        toggleReceived(el);
+      }
+    }, true); // capture phase to intercept before row click
   }
 
   document.getElementById('loading').style.opacity='0';
@@ -844,7 +853,7 @@ function imgCells(items, orderId){
       ? (allReceived ? '#00B894' : partialReceived ? '#0084FF' : '#D63031') : '#6079BF';
     var wrapStyle = 'display:inline-flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0';
     var wrapClick = isMultiQty
-      ? ' onclick="event.stopPropagation();toggleReceived(this)" data-oid="'+oid+'" data-sku="'+s+'" data-qty="'+q+'" style="cursor:pointer;'+wrapStyle+'"'
+      ? ' class="recv-item" data-oid="'+oid+'" data-sku="'+s+'" data-qty="'+q+'" style="cursor:pointer;'+wrapStyle+'"'
       : ' style="'+wrapStyle+'"';
     var imgUrl = 'https://ss701.liverpool.com.mx/lg/'+s+'.jpg';
     return '<div'+wrapClick+'>' +
@@ -951,7 +960,7 @@ function renderTable() {
           </div>` : ''}
         </td>
         <td><a class="order-link" href="${o.url}" target="_blank" onclick="event.stopPropagation()">${o.id}</a></td>
-        <td style="padding:4px 6px" onclick="event.stopPropagation()">
+        <td style="padding:4px 6px">
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
             ${imgCells(o.items, o.id)}
           </div>
