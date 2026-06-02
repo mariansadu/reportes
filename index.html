@@ -435,7 +435,8 @@ let ALL_ORDERS=[], STATS={}, TRANSPORTISTAS={};
 let activeFilter='VENCIDO', statusFilter='ALL', searchTerm='', expandedId=null;
 let sortCol=null, sortDir=1;
 let PROCESSED_BY = {};
-let CURRENT_USER = {nombre:'Colaborador', email:''}; // sortDir: 1=asc, -1=desc
+let CURRENT_USER = {nombre:'Colaborador', email:''};
+let RECEIVED = {}; // {orderId: Set of received SKUs} // sortDir: 1=asc, -1=desc
 
 // ── SYNC STATE ────────────────────────────────────────────────────────
 let PROCESSED = new Set();   // order IDs marked as processed
@@ -496,6 +497,19 @@ function syncFromServer() {
         }
       });
       localStorage.setItem(TODAY_KEY, JSON.stringify([...PROCESSED]));
+      // Sync recibidos
+      if(data.recibidos) {
+        Object.entries(data.recibidos).forEach(([orderId, skus]) => {
+          if(!RECEIVED[orderId]) RECEIVED[orderId] = new Set();
+          Object.entries(skus).forEach(([sku, info]) => {
+            if(info.recibido) RECEIVED[orderId].add(sku);
+            else RECEIVED[orderId].delete(sku);
+          });
+        });
+        const savedReceived = {};
+        Object.keys(RECEIVED).forEach(k => { savedReceived[k] = [...RECEIVED[k]]; });
+        localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(savedReceived));
+      }
     }
     setSyncStatus('ok','Sincronizado · '+new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
     updateProgress(); renderTable();
@@ -599,6 +613,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     syncInterval = setInterval(syncFromServer, 15000);
     // Identify current user
     fetchCurrentUser();
+    // Load received items
+    loadReceived();
   }
 
   document.getElementById('loading').style.opacity='0';
@@ -735,6 +751,18 @@ function getFiltered() {
 }
 
 
+function getTrackingUrl(transportista, guia) {
+  if(!guia || guia === '—') return '#';
+  var t = (transportista||'').toUpperCase().replace('_EXTERNO','');
+  if(t.includes('ESTAFETA')) return 'https://www.estafeta.com/herramientas/rastreo?wayBillType=1&waybill=' + guia;
+  if(t.includes('FEDEX'))    return 'https://www.fedex.com/fedextrack/?trknbr=' + guia;
+  if(t.includes('DHL'))      return 'https://www.dhl.com/mx-es/home/rastreo.html?tracking-id=' + guia;
+  if(t.includes('UPS'))      return 'https://www.ups.com/track?tracknum=' + guia;
+  if(t.includes('PAQUETEXPRESS')) return 'https://www.paquetexpress.com.mx/rastreo?guia=' + guia;
+  // Fallback: Google search
+  return 'https://www.google.com/search?q=rastreo+' + guia + '+' + encodeURIComponent(transportista);
+}
+
 function getInitials(nombre, email) {
   if(!nombre || nombre === '...' || nombre === '?') return '?';
   const parts = nombre.trim().split(' ').filter(Boolean);
@@ -744,17 +772,59 @@ function getInitials(nombre, email) {
   return parts[0][0].toUpperCase();
 }
 
-function imgCells(items){
+function toggleReceived(orderId, sku, event) {
+  event.stopPropagation();
+  if(!RECEIVED[orderId]) RECEIVED[orderId] = new Set();
+  const isNowReceived = !RECEIVED[orderId].has(sku);
+  if(isNowReceived) { RECEIVED[orderId].add(sku); } else { RECEIVED[orderId].delete(sku); }
+  // Save to localStorage
+  const savedReceived = {};
+  Object.keys(RECEIVED).forEach(k => { savedReceived[k] = [...RECEIVED[k]]; });
+  localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(savedReceived));
+  // Sync with server
+  pushRecibido(orderId, sku, isNowReceived);
+  renderTable();
+}
+
+function pushRecibido(orderId, sku, recibido) {
+  if(!SCRIPT_URL) return;
+  const cbName = 'biubox_recv_' + Date.now();
+  const script = document.createElement('script');
+  window[cbName] = function(data) { script.remove(); delete window[cbName]; };
+  script.src = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
+    '&orderId=' + encodeURIComponent(orderId) +
+    '&sku=' + encodeURIComponent(sku) +
+    '&recibido=' + recibido + '&callback=' + cbName;
+  script.onerror = () => { script.remove(); delete window[cbName]; };
+  document.head.appendChild(script);
+}
+
+function loadReceived() {
+  const saved = localStorage.getItem('biubox_received_' + TODAY_KEY);
+  if(saved) {
+    const data = JSON.parse(saved);
+    Object.keys(data).forEach(k => { RECEIVED[k] = new Set(data[k]); });
+  }
+}
+
+function imgCells(items, orderId){
   var servers=['ss701','ss702','ss703','ss704','ss705','ss706','ss707','ss708','ss709','ss710','ss711','ss712'];
   if(!Array.isArray(items)) items=[{s:String(items),q:1}];
+  var oid = orderId || '';
   return items.map(function(item){
     var s=String(item.s||'').trim();
     var q=item.q||1;
     if(!s) return '';
+    var isReceived = RECEIVED[oid] && RECEIVED[oid].has(s);
+    var borderColor = items.length > 1 ? (isReceived ? '2px solid #00B894' : '2px solid #D63031') : '0.5px solid rgba(96,121,191,0.15)';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:inline-flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0';
+    wrap.style.cssText='display:inline-flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;cursor:'+(items.length>1?'pointer':'default');
+    if(items.length > 1) {
+      wrap.title = isReceived ? 'Recibido — clic para desmarcar' : 'Pendiente — clic para marcar como recibido';
+      wrap.setAttribute('onclick', 'toggleReceived("'+oid+'","'+s+'",event)');
+    }
     var imgWrap=document.createElement('div');
-    imgWrap.style.cssText='width:44px;height:44px;border-radius:6px;overflow:hidden;border:0.5px solid rgba(96,121,191,0.15);background:#f5f5f5';
+    imgWrap.style.cssText='width:44px;height:44px;border-radius:6px;overflow:hidden;border:'+borderColor+';background:#f5f5f5;transition:border .2s';
     var img=document.createElement('img');
     img.style.cssText='width:44px;height:44px;object-fit:cover';
     img.referrerPolicy='no-referrer';
@@ -868,7 +938,7 @@ function renderTable() {
         <td><a class="order-link" href="${o.url}" target="_blank" onclick="event.stopPropagation()">${o.id}</a></td>
         <td style="padding:4px 6px">
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-            ${imgCells(o.items)}
+            ${imgCells(o.items, o.id)}
           </div>
         </td>
         <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.producto}">${multiBadge}${o.producto}</td>
@@ -876,7 +946,7 @@ function renderTable() {
         <td><span class="mono" style="font-size:10px">${o.sku}</span></td>
         <td style="text-align:center;font-weight:600">${o.cantidad}</td>
         <td style="font-size:11px">${trShort}</td>
-        <td><span class="mono" style="font-size:10px">${guiaShort}</span></td>
+        <td><a href="${getTrackingUrl(o.transportista, o.guia)}" target="_blank" onclick="event.stopPropagation()" class="mono" style="font-size:10px;color:var(--liv);text-decoration:none;border-bottom:1px solid var(--liv-mid)" title="Rastrear envío">${guiaShort}</a></td>
         <td style="font-size:11px;white-space:nowrap">${o.limite}</td>
         <td>
           <div class="days-wrap">
