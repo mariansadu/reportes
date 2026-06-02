@@ -509,7 +509,13 @@ function syncFromServer() {
       }
     }
     setSyncStatus('ok','Sincronizado · '+new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
-    updateProgress(); renderTable();
+    updateProgress();
+    // Only re-render if no row is currently expanded to avoid interrupting user
+    if(!expandedId) renderTable();
+    else {
+      // Just update progress bar without closing expanded row
+      document.getElementById('tableBody').querySelectorAll('.procesado-row').forEach(function(r){});
+    }
   };
   script.src = SCRIPT_URL+'?action=get&key='+encodeURIComponent(TODAY_KEY)+'&callback='+cbName;
   document.head.appendChild(script);
@@ -785,13 +791,16 @@ function toggleReceived(orderId, sku, qty, event) {
 
 function pushRecibido(orderId, sku, count, total) {
   if(!SCRIPT_URL) return;
+  // Invalidate historial cache for this order so next open shows fresh data
+  delete HISTORIAL_CACHE[orderId];
   const cbName = 'biubox_recv_' + Date.now();
   const script = document.createElement('script');
   window[cbName] = function(data) { script.remove(); delete window[cbName]; };
   script.src = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(orderId) +
     '&sku=' + encodeURIComponent(sku) +
-    '&count=' + count + '&total=' + total + '&callback=' + cbName;
+    '&count=' + count + '&total=' + total +
+    '&skuLabel=' + encodeURIComponent(sku) + '&callback=' + cbName;
   script.onerror = () => { script.remove(); delete window[cbName]; };
   document.head.appendChild(script);
 }
@@ -815,18 +824,21 @@ function imgCells(items, orderId){
     var isMultiQty = items.length > 1 || q > 1;
     var allReceived = recvCount >= q;
     var partialReceived = recvCount > 0 && recvCount < q;
-    var borderColor = isMultiQty ? (allReceived ? '2px solid #00B894' : partialReceived ? '2px solid #0084FF' : '2px solid #D63031') : '0.5px solid rgba(96,121,191,0.15)';
+    var borderColor = isMultiQty ? (allReceived ? '3px solid #00B894' : partialReceived ? '3px solid #0084FF' : '3px solid #D63031') : '0.5px solid rgba(96,121,191,0.15)';
+    var clickAttr = isMultiQty ? 'onclick="event.stopPropagation();toggleReceived(\'' + oid + '\',\'' + s + '\',' + q + ',event)" style="cursor:pointer"' : '';
+    var titleAttr = isMultiQty ? 'title="' + (allReceived ? 'Todos recibidos — clic para reiniciar' : 'Clic para marcar recibidos ('+recvCount+'/'+q+')') + '"' : '';
+
+    // Build badge text
+    var badgeText = (isMultiQty && recvCount > 0) ? (recvCount+'/'+q) : ('×'+q);
+    var badgeColor = (isMultiQty && recvCount > 0) ? (allReceived?'#00B894':partialReceived?'#0084FF':'#D63031') : '#6079BF';
+
+    // Build image src with server fallback via JS
+    var imgId = 'img_' + oid.replace(/\W/g,'') + '_' + s;
+
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:inline-flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;cursor:'+(isMultiQty?'pointer':'default');
-    if(isMultiQty) {
-      wrap.title = allReceived ? 'Todos recibidos — clic para reiniciar' : 'Clic para marcar unidades recibidas ('+recvCount+'/'+q+')';
-      wrap.dataset.oid = oid;
-      wrap.dataset.sku = s;
-      wrap.dataset.qty = q;
-      wrap.classList.add('recv-btn');
-    }
+    wrap.style.cssText='display:inline-flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0';
     var imgWrap=document.createElement('div');
-    imgWrap.style.cssText='width:44px;height:44px;border-radius:6px;overflow:hidden;border:'+borderColor+';background:#f5f5f5;transition:border .2s';
+    imgWrap.style.cssText='width:44px;height:44px;border-radius:6px;overflow:hidden;border:'+borderColor+';background:#f5f5f5;transition:border .15s';
     var img=document.createElement('img');
     img.style.cssText='width:44px;height:44px;object-fit:cover';
     img.referrerPolicy='no-referrer';
@@ -857,7 +869,13 @@ function imgCells(items, orderId){
       badge.style.cssText='font-size:10px;font-weight:600;color:#6079BF;line-height:1';
     }
     wrap.appendChild(badge);
-    return wrap.outerHTML;
+    // Add inline click handler to wrap outerHTML
+    var html = wrap.outerHTML;
+    if(isMultiQty) {
+      html = html.replace('<div style="display:inline-flex;flex-direction:column', 
+        '<div onclick="event.stopPropagation();toggleReceived(\'' + oid.replace(/'/g,"\'") + '\',\'' + s + '\',' + q + ',event)" title="' + (allReceived?'Todos recibidos':'Recibidos: '+recvCount+'/'+q) + '" style="cursor:pointer;display:inline-flex;flex-direction:column');
+    }
+    return html;
   }).join('');
 }
 function fetchCurrentUser() {
@@ -943,7 +961,7 @@ function renderTable() {
           </div>` : ''}
         </td>
         <td><a class="order-link" href="${o.url}" target="_blank" onclick="event.stopPropagation()">${o.id}</a></td>
-        <td style="padding:4px 6px">
+        <td style="padding:4px 6px" onclick="event.stopPropagation()">
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
             ${imgCells(o.items, o.id)}
           </div>
@@ -967,14 +985,7 @@ function renderTable() {
   }).join('');
 
   updateSortIcons();
-  // Event delegation for recv-btn clicks
-  document.getElementById('tableBody').onclick = function(e) {
-    const btn = e.target.closest('.recv-btn');
-    if(btn) {
-      e.stopPropagation();
-      toggleReceived(btn.dataset.oid, btn.dataset.sku, parseInt(btn.dataset.qty), e);
-    }
-  };
+
   if(filtered.length>500){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td colspan="12" style="text-align:center;padding:14px;color:var(--text-2);font-size:11px">
@@ -987,35 +998,59 @@ function toggleRow(id){
   expandedId=expandedId===id?null:id;
   renderTable();
   if(expandedId) loadHistorial(expandedId);
+  // Re-delegate events after render
+  setupRecvDelegation();
 }
+
+
+
+const HISTORIAL_CACHE = {}; // Cache historial in memory
 
 function loadHistorial(orderId) {
   const el = document.getElementById('hist-' + orderId);
   if(!el) return;
+
+  // Show cached version instantly if available
+  if(HISTORIAL_CACHE[orderId]) {
+    renderHistorial(el, HISTORIAL_CACHE[orderId]);
+    return;
+  }
+
+  el.innerHTML = '<span style="color:#bbb;font-size:10px">Cargando...</span>';
   const cbName = 'biubox_hist_' + Date.now();
   const script = document.createElement('script');
   window[cbName] = function(data) {
     script.remove(); delete window[cbName];
-    if(!el) return;
-    if(!data || !data.historial || data.historial.length === 0) {
-      el.innerHTML = '<span style="color:#bbb">Sin historial</span>';
-      return;
-    }
-    el.innerHTML = data.historial.map(function(h) {
-      const icon = h.accion === 'Procesado' ? '✅' : '❌';
-      const initials = getInitials(h.nombre, h.email);
-      return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f0f0f0">
-        <span style="font-size:13px">${icon}</span>
-        <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#6079BF;color:#fff;font-size:8px;font-weight:700;flex-shrink:0">${initials}</span>
-        <span style="font-weight:600;color:var(--text)">${h.nombre}</span>
-        <span style="color:#888">${h.accion}</span>
-        <span style="margin-left:auto;color:#888;font-size:10px">${h.hora}</span>
-      </div>`;
-    }).join('');
+    if(!data || !data.historial) return;
+    HISTORIAL_CACHE[orderId] = data.historial;
+    const el2 = document.getElementById('hist-' + orderId);
+    if(el2) renderHistorial(el2, data.historial);
   };
   script.src = SCRIPT_URL + '?action=historial&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(orderId) + '&callback=' + cbName;
   document.head.appendChild(script);
+}
+
+function renderHistorial(el, historial) {
+  if(!historial || historial.length === 0) {
+    el.innerHTML = '<span style="color:#bbb;font-size:10px">Sin historial</span>';
+    return;
+  }
+  el.innerHTML = historial.map(function(h) {
+    var icon, bgColor;
+    if(h.accion === 'Procesado')           { icon = '✅'; bgColor = '#00B894'; }
+    else if(h.accion === 'Desprocesado')   { icon = '❌'; bgColor = '#D63031'; }
+    else if(h.accion.includes('Recibió'))  { icon = '📦'; bgColor = '#0084FF'; }
+    else                                   { icon = '↩️'; bgColor = '#888'; }
+    const initials = getInitials(h.nombre, h.email);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f5f5">' +
+      '<span style="font-size:13px">' + icon + '</span>' +
+      '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:'+bgColor+';color:#fff;font-size:8px;font-weight:700;flex-shrink:0">' + initials + '</span>' +
+      '<span style="font-weight:600;color:var(--text);min-width:70px">' + h.nombre + '</span>' +
+      '<span style="color:#555;font-size:11px">' + h.accion + '</span>' +
+      '<span style="margin-left:auto;color:#aaa;font-size:10px;white-space:nowrap">' + h.hora + '</span>' +
+      '</div>';
+  }).join('');
 }
 
 function updateSortIcons() {
