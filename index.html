@@ -545,14 +545,16 @@ function pushToServer(ids, changedOrderId, isProcessed) {
     }
     setTimeout(syncFromServer, 500);
   };
-  script.src = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
+  var serverUrl = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(changedOrderId) +
     '&procesado=' + (isProcessed ? 'true' : 'false') +
     '&nombre=' + encodeURIComponent(CURRENT_USER.nombre || 'Colaborador') +
-    '&email=' + encodeURIComponent(CURRENT_USER.email || '') +
-    '&callback=' + cbName;
-  script.onerror = function() { script.remove(); delete window[cbName]; setTimeout(syncFromServer, 1000); };
-  document.head.appendChild(script);
+    '&email=' + encodeURIComponent(CURRENT_USER.email || '');
+  fetch(serverUrl, {redirect: 'follow', mode: 'cors', credentials: 'include'})
+    .then(function(r) { return r.text(); })
+    .then(function(text) { setTimeout(syncFromServer, 500); })
+    .catch(function() { setTimeout(syncFromServer, 1000); });
+  script.remove(); delete window[cbName];
 }
 
 // ── TOGGLE PROCESSED ──────────────────────────────────────────────────
@@ -841,34 +843,29 @@ function toggleReceived(el) {
 function pushRecibido(orderId, sku, count, total) {
   if(!SCRIPT_URL) return;
   delete HISTORIAL_CACHE[orderId];
-  var cbName = 'biubox_recv_' + Date.now();
-  var script = document.createElement('script');
-  window[cbName] = function(data) {
-    script.remove(); delete window[cbName];
-    setTimeout(function() {
-      delete HISTORIAL_CACHE[orderId];
-      if(expandedId === orderId) loadHistorial(orderId);
-    }, 500);
-  };
-  // Use googleusercontent URL directly to avoid redirect issue
-  var url = SCRIPT_URL.replace('script.google.com/a/macros', 'script.googleusercontent.com/a/macros')
-    .replace('/exec', '/echo');
-  if(url === SCRIPT_URL) url = SCRIPT_URL; // fallback if replace didn't work
-  url = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
+  var url = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(orderId) +
     '&sku=' + encodeURIComponent(sku) +
     '&count=' + count + '&total=' + total +
-    '&skuLabel=' + encodeURIComponent(sku) + '&callback=' + cbName;
-  script.src = url;
-  script.onerror = function() {
-    script.remove(); delete window[cbName];
-    setTimeout(function() {
-      delete HISTORIAL_CACHE[orderId];
-      if(expandedId === orderId) loadHistorial(orderId);
-    }, 2000);
-  };
-  document.head.appendChild(script);
+    '&skuLabel=' + encodeURIComponent(sku) +
+    '&nombre=' + encodeURIComponent(CURRENT_USER.nombre || 'Colaborador') +
+    '&email=' + encodeURIComponent(CURRENT_USER.email || '');
+  fetch(url, {redirect: 'follow', mode: 'cors', credentials: 'include'})
+    .then(function(r) { return r.text(); })
+    .then(function() {
+      setTimeout(function() {
+        delete HISTORIAL_CACHE[orderId];
+        if(expandedId === orderId) loadHistorial(orderId);
+      }, 500);
+    })
+    .catch(function() {
+      setTimeout(function() {
+        delete HISTORIAL_CACHE[orderId];
+        if(expandedId === orderId) loadHistorial(orderId);
+      }, 2000);
+    });
 }
+
 
 function loadReceived() {
   const saved = localStorage.getItem('biubox_received_' + TODAY_KEY);
