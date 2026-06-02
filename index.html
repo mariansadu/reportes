@@ -788,8 +788,6 @@ function getInitials(nombre, email) {
   if(!nombre || nombre === '...' || nombre === '?') return '?';
   const parts = nombre.trim().split(' ').filter(Boolean);
   if(parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  // Single name: use first 2 letters
-  if(parts[0].length >= 2) return parts[0].slice(0,2).toUpperCase();
   return parts[0][0].toUpperCase();
 }
 
@@ -849,6 +847,11 @@ function pushRecibido(orderId, sku, count, total) {
     '&skuLabel=' + encodeURIComponent(sku) + '&callback=' + cbName;
   script.onerror = () => { script.remove(); delete window[cbName]; };
   document.head.appendChild(script);
+  // Reload historial after server confirms save
+  setTimeout(function() {
+    delete HISTORIAL_CACHE[orderId];
+    if(expandedId === orderId) loadHistorial(orderId);
+  }, 2000);
 }
 
 function loadReceived() {
