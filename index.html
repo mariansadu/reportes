@@ -736,16 +736,11 @@ function getFiltered() {
 
 
 function getInitials(nombre, email) {
-  if(!nombre || nombre === '...') return '?';
+  if(!nombre || nombre === '...' || nombre === '?') return '?';
   const parts = nombre.trim().split(' ').filter(Boolean);
   if(parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  // Single name - use first letter + first letter of email domain username
-  if(email) {
-    const local = email.split('@')[0];
-    // Try to find a number or separator to get last name initial
-    const match = local.match(/[._]([a-zA-Z])/);
-    if(match) return (parts[0][0] + match[1]).toUpperCase();
-  }
+  // Single name: use first 2 letters
+  if(parts[0].length >= 2) return parts[0].slice(0,2).toUpperCase();
   return parts[0][0].toUpperCase();
 }
 
@@ -844,6 +839,10 @@ function renderTable() {
               <div class="expand-val">${o.producto}</div>
               <a href="${o.url}" target="_blank" class="open-btn">🖨 Abrir pedido en Liverpool</a>
             </div>
+            <div class="expand-field" style="grid-column:span 6;margin-top:8px">
+              <div class="expand-lbl">📋 Historial de cambios</div>
+              <div id="hist-${o.id}" style="margin-top:4px;font-size:11px;color:var(--text-2)">Cargando...</div>
+            </div>
           </div>
         </td>
       </tr>`:'' ;
@@ -862,8 +861,8 @@ function renderTable() {
           </button>
           ${isDone && PROCESSED_BY[o.id] ? `<div style="font-size:9px;color:#6079BF;line-height:1.3;margin-top:3px;text-align:center" title="${PROCESSED_BY[o.id].nombre}&#10;${PROCESSED_BY[o.id].hora}">
             <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#6079BF;color:#fff;font-size:9px;font-weight:700">${getInitials(PROCESSED_BY[o.id].nombre, PROCESSED_BY[o.id].email)}</span>
-            <div style="color:#aaa;font-size:8px;margin-top:2px">${(PROCESSED_BY[o.id].hora||'').slice(0,10)}</div>
-            <div style="color:#aaa;font-size:8px">${(PROCESSED_BY[o.id].hora||'').slice(11,16)}</div>
+            <div style="color:#555;font-size:8px;font-weight:600;margin-top:2px">${(PROCESSED_BY[o.id].hora||'').slice(0,10)}</div>
+            <div style="color:#555;font-size:8px;font-weight:600">${(PROCESSED_BY[o.id].hora||'').slice(11,16)}</div>
           </div>` : ''}
         </td>
         <td><a class="order-link" href="${o.url}" target="_blank" onclick="event.stopPropagation()">${o.id}</a></td>
@@ -899,7 +898,40 @@ function renderTable() {
   }
 }
 
-function toggleRow(id){ expandedId=expandedId===id?null:id; renderTable(); }
+function toggleRow(id){
+  expandedId=expandedId===id?null:id;
+  renderTable();
+  if(expandedId) loadHistorial(expandedId);
+}
+
+function loadHistorial(orderId) {
+  const el = document.getElementById('hist-' + orderId);
+  if(!el) return;
+  const cbName = 'biubox_hist_' + Date.now();
+  const script = document.createElement('script');
+  window[cbName] = function(data) {
+    script.remove(); delete window[cbName];
+    if(!el) return;
+    if(!data || !data.historial || data.historial.length === 0) {
+      el.innerHTML = '<span style="color:#bbb">Sin historial</span>';
+      return;
+    }
+    el.innerHTML = data.historial.map(function(h) {
+      const icon = h.accion === 'Procesado' ? '✅' : '❌';
+      const initials = getInitials(h.nombre, h.email);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f0f0f0">
+        <span style="font-size:13px">${icon}</span>
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#6079BF;color:#fff;font-size:8px;font-weight:700;flex-shrink:0">${initials}</span>
+        <span style="font-weight:600;color:var(--text)">${h.nombre}</span>
+        <span style="color:#888">${h.accion}</span>
+        <span style="margin-left:auto;color:#888;font-size:10px">${h.hora}</span>
+      </div>`;
+    }).join('');
+  };
+  script.src = SCRIPT_URL + '?action=historial&key=' + encodeURIComponent(TODAY_KEY) +
+    '&orderId=' + encodeURIComponent(orderId) + '&callback=' + cbName;
+  document.head.appendChild(script);
+}
 
 function updateSortIcons() {
   ['id','producto','marca','sku','cantidad','transportista','guia','limite','dias','prioridad'].forEach(col => {
