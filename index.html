@@ -510,12 +510,9 @@ function syncFromServer() {
     }
     setSyncStatus('ok','Sincronizado · '+new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
     updateProgress();
-    // Only re-render if no row is currently expanded to avoid interrupting user
-    if(!expandedId) renderTable();
-    else {
-      // Just update progress bar without closing expanded row
-      document.getElementById('tableBody').querySelectorAll('.procesado-row').forEach(function(r){});
-    }
+    // Always re-render to reflect latest state
+    renderTable();
+    if(expandedId) loadHistorial(expandedId);
   };
   script.src = SCRIPT_URL+'?action=get&key='+encodeURIComponent(TODAY_KEY)+'&callback='+cbName;
   document.head.appendChild(script);
@@ -785,7 +782,24 @@ function toggleReceived(el) {
   RECEIVED[oid][sku] = next;
   localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(RECEIVED));
   pushRecibido(oid, sku, next, qty);
-  renderTable();
+
+  // Update ONLY the image cell in the DOM without re-rendering the whole table
+  // This keeps the historial open if expanded
+  const allReceived = next >= qty;
+  const partialReceived = next > 0 && next < qty;
+  const border = allReceived ? '3px solid #00B894' : partialReceived ? '3px solid #0084FF' : '3px solid #D63031';
+  const badgeColor = allReceived ? '#00B894' : partialReceived ? '#0084FF' : '#D63031';
+  const badgeText = next > 0 ? (next+'/'+qty) : ('x'+qty);
+
+  // Update this element's border and badge
+  el.dataset.oid = oid; // keep data
+  var imgDiv = el.querySelector('div');
+  if(imgDiv) imgDiv.style.border = border;
+  var badge = el.querySelector('span');
+  if(badge) { badge.textContent = badgeText; badge.style.color = badgeColor; }
+
+  // Update progress if all items received
+  updateProgress();
 }
 
 function pushRecibido(orderId, sku, count, total) {
