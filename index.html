@@ -480,7 +480,7 @@ function syncFromServer() {
     if(local) PROCESSED = new Set(JSON.parse(local));
     setSyncStatus('error','Sin conexión — datos locales');
     updateProgress(); renderTable();
-  }, 8000);
+  }, 20000);
   window[cbName] = function(data) {
     clearTimeout(timer); script.remove(); delete window[cbName];
     if(data && data.ordenes) {
