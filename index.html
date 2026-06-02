@@ -533,14 +533,26 @@ function syncFromServer() {
 function pushToServer(ids, changedOrderId, isProcessed) {
   localStorage.setItem(TODAY_KEY, JSON.stringify([...ids]));
   if(!SCRIPT_URL || !changedOrderId) return;
-  var url = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
+  var cbName = 'biubox_mark_' + Date.now();
+  var script = document.createElement('script');
+  window[cbName] = function(data) {
+    script.remove(); delete window[cbName];
+    if(data && data.nombre && isProcessed) {
+      PROCESSED_BY[changedOrderId] = {
+        procesado: true, nombre: data.nombre, email: data.email,
+        hora: new Date().toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})
+      };
+    }
+    setTimeout(syncFromServer, 500);
+  };
+  script.src = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(changedOrderId) +
-    '&procesado=' + (isProcessed ? 'true' : 'false');
-  fetch(url, {mode: 'no-cors', redirect: 'follow'})
-    .then(function() {
-      setTimeout(syncFromServer, 1000);
-    })
-    .catch(function() {});
+    '&procesado=' + (isProcessed ? 'true' : 'false') +
+    '&nombre=' + encodeURIComponent(CURRENT_USER.nombre || 'Colaborador') +
+    '&email=' + encodeURIComponent(CURRENT_USER.email || '') +
+    '&callback=' + cbName;
+  script.onerror = function() { script.remove(); delete window[cbName]; setTimeout(syncFromServer, 1000); };
+  document.head.appendChild(script);
 }
 
 // ── TOGGLE PROCESSED ──────────────────────────────────────────────────
@@ -552,8 +564,13 @@ async function toggleProcessed(orderId, event) {
   const isNowProcessed = !PROCESSED.has(orderId);
   if(isNowProcessed) {
     PROCESSED.add(orderId);
-    // Store local mark with timestamp while waiting for server
-    PROCESSED_BY[orderId] = { procesado: true, nombre: '...', email: '', hora: new Date().toLocaleString('es-MX') };
+    // Use current user info immediately
+    PROCESSED_BY[orderId] = {
+      procesado: true,
+      nombre: CURRENT_USER.nombre || 'Colaborador',
+      email: CURRENT_USER.email || '',
+      hora: new Date().toLocaleString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})
+    };
   } else {
     PROCESSED.delete(orderId);
     delete PROCESSED_BY[orderId];
@@ -824,20 +841,33 @@ function toggleReceived(el) {
 function pushRecibido(orderId, sku, count, total) {
   if(!SCRIPT_URL) return;
   delete HISTORIAL_CACHE[orderId];
-  // Use fetch with no-cors to follow redirects
-  var url = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
+  var cbName = 'biubox_recv_' + Date.now();
+  var script = document.createElement('script');
+  window[cbName] = function(data) {
+    script.remove(); delete window[cbName];
+    setTimeout(function() {
+      delete HISTORIAL_CACHE[orderId];
+      if(expandedId === orderId) loadHistorial(orderId);
+    }, 500);
+  };
+  // Use googleusercontent URL directly to avoid redirect issue
+  var url = SCRIPT_URL.replace('script.google.com/a/macros', 'script.googleusercontent.com/a/macros')
+    .replace('/exec', '/echo');
+  if(url === SCRIPT_URL) url = SCRIPT_URL; // fallback if replace didn't work
+  url = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(orderId) +
     '&sku=' + encodeURIComponent(sku) +
     '&count=' + count + '&total=' + total +
-    '&skuLabel=' + encodeURIComponent(sku);
-  fetch(url, {mode: 'no-cors', redirect: 'follow'})
-    .then(function() {
-      setTimeout(function() {
-        delete HISTORIAL_CACHE[orderId];
-        if(expandedId === orderId) loadHistorial(orderId);
-      }, 1500);
-    })
-    .catch(function() {});
+    '&skuLabel=' + encodeURIComponent(sku) + '&callback=' + cbName;
+  script.src = url;
+  script.onerror = function() {
+    script.remove(); delete window[cbName];
+    setTimeout(function() {
+      delete HISTORIAL_CACHE[orderId];
+      if(expandedId === orderId) loadHistorial(orderId);
+    }, 2000);
+  };
+  document.head.appendChild(script);
 }
 
 function loadReceived() {
