@@ -486,25 +486,14 @@ function syncFromServer() {
     clearTimeout(timer); script.remove(); delete window[cbName];
     if(data && data.ordenes) {
       // Merge server data with local — never remove local marks
-      // Build lookup of local IDs normalized (no leading zeros)
-      const localIdMap = {};
-      ALL_ORDERS.forEach(o => {
-        const normalized = String(parseInt(o.id, 10));
-        localIdMap[normalized] = o.id;
-      });
       Object.entries(data.ordenes).forEach(([id, info]) => {
-        // Find the real ID with leading zeros
-        const realId = localIdMap[id] || localIdMap[String(parseInt(id, 10))] || id;
         if(info.procesado) {
-          PROCESSED.add(realId);
+          PROCESSED.add(id);
           if(info.nombre && info.nombre !== 'Colaborador') {
-            PROCESSED_BY[realId] = info;
-          } else if(!PROCESSED_BY[realId]) {
-            PROCESSED_BY[realId] = info;
+            PROCESSED_BY[id] = info;
+          } else if(!PROCESSED_BY[id]) {
+            PROCESSED_BY[id] = info;
           }
-        } else {
-          // If explicitly marked as not processed, remove it
-          PROCESSED.delete(realId);
         }
       });
       localStorage.setItem(TODAY_KEY, JSON.stringify([...PROCESSED]));
