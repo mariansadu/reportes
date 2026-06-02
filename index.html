@@ -536,7 +536,12 @@ function pushToServer(ids, changedOrderId, isProcessed) {
   if(!SCRIPT_URL || !changedOrderId) return;
   var cbName = 'biubox_mark_' + Date.now();
   var script = document.createElement('script');
+  var timer = setTimeout(function() {
+    script.remove(); delete window[cbName];
+    setTimeout(syncFromServer, 500);
+  }, 15000);
   window[cbName] = function(data) {
+    clearTimeout(timer);
     script.remove(); delete window[cbName];
     if(data && data.nombre && isProcessed) {
       PROCESSED_BY[changedOrderId] = {
@@ -546,16 +551,18 @@ function pushToServer(ids, changedOrderId, isProcessed) {
     }
     setTimeout(syncFromServer, 500);
   };
-  var serverUrl = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
+  script.src = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(changedOrderId) +
     '&procesado=' + (isProcessed ? 'true' : 'false') +
     '&nombre=' + encodeURIComponent(CURRENT_USER.nombre || 'Colaborador') +
-    '&email=' + encodeURIComponent(CURRENT_USER.email || '');
-  fetch(serverUrl, {redirect: 'follow', mode: 'no-cors'})
-    .then(function(r) { return r.text(); })
-    .then(function(text) { setTimeout(syncFromServer, 500); })
-    .catch(function() { setTimeout(syncFromServer, 1000); });
-  script.remove(); delete window[cbName];
+    '&email=' + encodeURIComponent(CURRENT_USER.email || '') +
+    '&callback=' + cbName;
+  script.onerror = function() {
+    clearTimeout(timer);
+    script.remove(); delete window[cbName];
+    setTimeout(syncFromServer, 1000);
+  };
+  document.head.appendChild(script);
 }
 
 // ── TOGGLE PROCESSED ──────────────────────────────────────────────────
