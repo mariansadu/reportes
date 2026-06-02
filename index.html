@@ -499,13 +499,25 @@ function syncFromServer() {
       localStorage.setItem(TODAY_KEY, JSON.stringify([...PROCESSED]));
       // Sync recibidos
       if(data.recibidos) {
+        // Replace server data — don't accumulate
         Object.entries(data.recibidos).forEach(([orderId, skus]) => {
           if(!RECEIVED[orderId]) RECEIVED[orderId] = {};
           Object.entries(skus).forEach(([sku, info]) => {
-            RECEIVED[orderId][sku] = info.count || 0;
+            var cnt = info.count || 0;
+            if(cnt > 0) RECEIVED[orderId][sku] = cnt;
           });
         });
-        localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(RECEIVED));
+        try {
+          var toSave = {};
+          Object.keys(RECEIVED).forEach(function(k) {
+            var skus = {};
+            Object.keys(RECEIVED[k]).forEach(function(sk) {
+              if(RECEIVED[k][sk] > 0) skus[sk] = RECEIVED[k][sk];
+            });
+            if(Object.keys(skus).length > 0) toSave[k] = skus;
+          });
+          localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(toSave));
+        } catch(e) {}
       }
     }
     setSyncStatus('ok','Sincronizado · '+new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}));
@@ -782,6 +794,7 @@ function getInitials(nombre, email) {
 }
 
 function toggleReceived(el) {
+  if(!el || !el.dataset || !el.dataset.oid) return;
   var oid = el.dataset.oid;
   var sku = el.dataset.sku;
   var qty = parseInt(el.dataset.qty)||1;
@@ -789,7 +802,18 @@ function toggleReceived(el) {
   const current = parseInt(RECEIVED[oid][sku])||0;
   const next = current >= qty ? 0 : current + 1;
   RECEIVED[oid][sku] = next;
-  localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(RECEIVED));
+  // Only save non-zero values to prevent localStorage from growing
+  try {
+    var toSave = {};
+    Object.keys(RECEIVED).forEach(function(k) {
+      var skus = {};
+      Object.keys(RECEIVED[k]).forEach(function(sk) {
+        if(RECEIVED[k][sk] > 0) skus[sk] = RECEIVED[k][sk];
+      });
+      if(Object.keys(skus).length > 0) toSave[k] = skus;
+    });
+    localStorage.setItem('biubox_received_' + TODAY_KEY, JSON.stringify(toSave));
+  } catch(e) { console.warn('localStorage full, skipping save'); }
   pushRecibido(oid, sku, next, qty);
 
   // Update ONLY the image cell in the DOM without re-rendering the whole table
