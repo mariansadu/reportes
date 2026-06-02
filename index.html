@@ -533,26 +533,14 @@ function syncFromServer() {
 function pushToServer(ids, changedOrderId, isProcessed) {
   localStorage.setItem(TODAY_KEY, JSON.stringify([...ids]));
   if(!SCRIPT_URL || !changedOrderId) return;
-  const cbName = 'biubox_mark_' + Date.now();
-  const script = document.createElement('script');
-  window[cbName] = function(data) {
-    script.remove(); delete window[cbName];
-    if(data && data.nombre && isProcessed) {
-      PROCESSED_BY[changedOrderId] = {
-        procesado: true,
-        nombre: data.nombre,
-        email: data.email,
-        hora: new Date().toLocaleString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})
-      };
-      renderTable();
-    }
-  };
-  script.src = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
+  var url = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(changedOrderId) +
-    '&procesado=' + (isProcessed ? 'true' : 'false') +
-    '&callback=' + cbName;
-  script.onerror = () => { script.remove(); delete window[cbName]; };
-  document.head.appendChild(script);
+    '&procesado=' + (isProcessed ? 'true' : 'false');
+  fetch(url, {mode: 'no-cors', redirect: 'follow'})
+    .then(function() {
+      setTimeout(syncFromServer, 1000);
+    })
+    .catch(function() {});
 }
 
 // ── TOGGLE PROCESSED ──────────────────────────────────────────────────
@@ -835,23 +823,21 @@ function toggleReceived(el) {
 
 function pushRecibido(orderId, sku, count, total) {
   if(!SCRIPT_URL) return;
-  // Invalidate historial cache for this order so next open shows fresh data
   delete HISTORIAL_CACHE[orderId];
-  const cbName = 'biubox_recv_' + Date.now();
-  const script = document.createElement('script');
-  window[cbName] = function(data) { script.remove(); delete window[cbName]; };
-  script.src = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
+  // Use fetch with no-cors to follow redirects
+  var url = SCRIPT_URL + '?action=marcar_recibido&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(orderId) +
     '&sku=' + encodeURIComponent(sku) +
     '&count=' + count + '&total=' + total +
-    '&skuLabel=' + encodeURIComponent(sku) + '&callback=' + cbName;
-  script.onerror = () => { script.remove(); delete window[cbName]; };
-  document.head.appendChild(script);
-  // Reload historial after server confirms save
-  setTimeout(function() {
-    delete HISTORIAL_CACHE[orderId];
-    if(expandedId === orderId) loadHistorial(orderId);
-  }, 2000);
+    '&skuLabel=' + encodeURIComponent(sku);
+  fetch(url, {mode: 'no-cors', redirect: 'follow'})
+    .then(function() {
+      setTimeout(function() {
+        delete HISTORIAL_CACHE[orderId];
+        if(expandedId === orderId) loadHistorial(orderId);
+      }, 1500);
+    })
+    .catch(function() {});
 }
 
 function loadReceived() {
