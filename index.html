@@ -45,13 +45,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .search-box:focus{background:rgba(255,255,255,0.22);width:240px}
 
 /* SYNC STATUS */
-.sync-bar{background:rgba(255,255,255,0.12);border-top:1px solid rgba(255,255,255,0.1);
-  padding:6px 32px;display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,0.8)}
+.sync-bar{background:#463793;border-top:1px solid rgba(255,255,255,0.1);
+  padding:6px 32px;display:flex;align-items:center;gap:8px;font-size:11px;color:#ffffff;font-weight:500}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:#00B894;flex-shrink:0}
 .sync-dot.syncing{background:#FDCB6E;animation:pulse 1s infinite}
 .sync-dot.error{background:#D63031}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.sync-url-setup{color:rgba(255,255,255,0.6);font-size:10px;margin-left:auto;cursor:pointer;text-decoration:underline}
+
 
 /* BODY */
 .body{padding:24px 32px;max-width:1600px;margin:0 auto}
@@ -275,7 +275,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="sync-bar">
     <div class="sync-dot" id="syncDot"></div>
     <span id="syncLabel">Iniciando sincronización...</span>
-    <span class="sync-url-setup" onclick="openModal()">⚙️ Configurar sync</span>
+    <span id="currentUser" style="margin-left:auto;font-size:10px;color:rgba(255,255,255,0.85);display:flex;align-items:center;gap:5px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span id="currentUserName">Identificando...</span>
+    </span>
   </div>
 </header>
 
@@ -480,9 +483,17 @@ function syncFromServer() {
   window[cbName] = function(data) {
     clearTimeout(timer); script.remove(); delete window[cbName];
     if(data && data.ordenes) {
-      PROCESSED.clear(); PROCESSED_BY = {};
+      // Merge server data with local — never remove local marks
       Object.entries(data.ordenes).forEach(([id, info]) => {
-        if(info.procesado) { PROCESSED.add(id); PROCESSED_BY[id] = info; }
+        if(info.procesado) {
+          PROCESSED.add(id);
+          // Only update PROCESSED_BY if server has user info
+          if(info.nombre && info.nombre !== 'Colaborador') {
+            PROCESSED_BY[id] = info;
+          } else if(!PROCESSED_BY[id]) {
+            PROCESSED_BY[id] = info;
+          }
+        }
       });
       localStorage.setItem(TODAY_KEY, JSON.stringify([...PROCESSED]));
     }
@@ -500,7 +511,7 @@ function pushToServer(ids, changedOrderId, isProcessed) {
   script.src = SCRIPT_URL + '?action=marcar&key=' + encodeURIComponent(TODAY_KEY) +
     '&orderId=' + encodeURIComponent(changedOrderId) +
     '&procesado=' + (isProcessed ? 'true' : 'false');
-  script.onload = () => { script.remove(); setTimeout(syncFromServer, 1000); };
+  script.onload = () => { script.remove(); setTimeout(syncFromServer, 800); };
   script.onerror = () => { script.remove(); };
   document.head.appendChild(script);
 }
@@ -512,7 +523,14 @@ async function toggleProcessed(orderId, event) {
   btn.classList.add('syncing-btn');
 
   const isNowProcessed = !PROCESSED.has(orderId);
-  if(isNowProcessed) { PROCESSED.add(orderId); } else { PROCESSED.delete(orderId); delete PROCESSED_BY[orderId]; }
+  if(isNowProcessed) {
+    PROCESSED.add(orderId);
+    // Store local mark with timestamp while waiting for server
+    PROCESSED_BY[orderId] = { procesado: true, nombre: '...', email: '', hora: new Date().toLocaleString('es-MX') };
+  } else {
+    PROCESSED.delete(orderId);
+    delete PROCESSED_BY[orderId];
+  }
   pushToServer(PROCESSED, orderId, isNowProcessed);
   btn.classList.remove('syncing-btn');
   updateProgress();
@@ -566,8 +584,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   if(SCRIPT_URL) {
     syncFromServer();
     syncInterval = setInterval(syncFromServer, 15000);
-  } else {
-    setSyncStatus('', '⚠️ Sin sync configurado — toca "⚙️ Configurar sync" para compartir entre compus');
+    // Identify current user
+    fetchCurrentUser();
   }
 
   document.getElementById('loading').style.opacity='0';
@@ -743,6 +761,21 @@ function imgCells(items){
     return wrap.outerHTML;
   }).join('');
 }
+function fetchCurrentUser() {
+  const cbName = 'biubox_user_' + Date.now();
+  const script = document.createElement('script');
+  window[cbName] = function(data) {
+    script.remove(); delete window[cbName];
+    if(data && data.nombre) {
+      CURRENT_USER = data;
+      const el = document.getElementById('currentUserName');
+      if(el) el.textContent = data.nombre + ' · ' + data.email;
+    }
+  };
+  script.src = SCRIPT_URL + '?action=whoami&callback=' + cbName;
+  document.head.appendChild(script);
+}
+
 function renderTable() {
   const filtered=sortData(getFiltered());
   document.getElementById('countLabel').textContent=filtered.length.toLocaleString();
