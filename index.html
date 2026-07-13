@@ -998,7 +998,7 @@ function imgCells(items, orderId){
     var wrapClick = isMultiQty
       ? ' class="recv-item" data-oid="'+oid+'" data-sku="'+s+'" data-qty="'+q+'" style="cursor:pointer;'+wrapStyle+'"'
       : ' style="'+wrapStyle+'"';
-    var imgUrl = 'https://ss701.liverpool.com.mx/lg/'+s+'.jpg';
+    var imgUrl = 'https://assets.biubox.io/products/_lvp-thumb/liverpool/'+s+'.jpg';
     return '<div'+wrapClick+'>' +
       '<div style="width:44px;height:44px;border-radius:6px;overflow:hidden;border:'+border+';background:#f5f5f5">' +
         '<img style="width:44px;height:44px;object-fit:cover" referrerpolicy="no-referrer" loading="lazy" src="'+imgUrl+'" onerror="tryNextServer(this,\''+s+'\')">' +
@@ -1009,10 +1009,21 @@ function imgCells(items, orderId){
 }
 
 function tryNextServer(img, sku) {
-  var servers = ['ss702','ss703','ss704','ss705','ss706','ss707','ss708','ss709','ss710','ss711','ss712'];
+  // ORDEN DE BÚSQUEDA DE IMÁGENES
+  // 1º) CDN de Biubox (assets.biubox.io) — se intenta primero (ver imgCells).
+  //     Ya resuelve y cachea internamente las rutas de Liverpool.
+  // 2º) Si el CDN falla (miss), recién ahí se va directo a Liverpool.
+  //     Esto minimiza los hits directos a Liverpool y evita bloqueos del WAF.
+  // 3º) Si nada carga, se muestra el ícono de respaldo.
+  var urls = [
+    'https://ss417.liverpool.com.mx/lg/'+sku+'.jpg',   // CDN público Liverpool
+    'https://sp101.liverpool.com.mx/i/'+sku+'.jpg',    // ruta supplier (marcas propias)
+    'https://ss417.liverpool.com.mx/xl/'+sku+'.jpg',
+    'https://sp101.liverpool.com.mx/i/'+sku+'_1p.jpg'
+  ];
   img.__si = (img.__si||0) + 1;
-  if(img.__si < servers.length) {
-    img.src = 'https://'+servers[img.__si-1]+'.liverpool.com.mx/lg/'+sku+'.jpg';
+  if(img.__si <= urls.length) {
+    img.src = urls[img.__si-1];
   } else {
     img.parentNode.style.cssText = 'width:44px;height:44px;border-radius:6px;background:#E8ECF5;display:flex;align-items:center;justify-content:center';
     img.parentNode.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6079BF" stroke-width="1.5"><path d="M7 16.5l-5-3l5-3l5 3v5.5l-5 3z"/><path d="M2 13.5v5.5l5 3"/><path d="M17 16.5l-5-3l5-3l5 3z"/></svg>';
