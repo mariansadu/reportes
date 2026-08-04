@@ -303,7 +303,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div>
         <h1>Procesamiento de Órdenes para BIU SUPPLY</h1>
         <div class="header-date" id="headerDate">04 / Agosto / 2026</div>
-        <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px"><span id="corteLabel">📥 Corte: 04/08/2026 03:35 PM</span> <span style="opacity:0.65;margin-left:6px">· v1.7</span></div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px"><span id="corteLabel">📥 Corte: 04/08/2026 03:35 PM</span> <span style="opacity:0.65;margin-left:6px">· v1.8</span></div>
       </div>
     </div>
     </div>
@@ -314,6 +314,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       <span id="currentUserName">Identificando...</span>
     </span>
+    <button id="bitacoraBtn" onclick="openBitacora()" title="Ver bitácora de cambios del día"
+      style="margin-left:14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);color:#fff;border-radius:7px;padding:4px 11px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px">
+      📋 Bitácora
+    </button>
   </div>
 </header>
 
@@ -1190,6 +1194,134 @@ function toggleRow(id){
 
 const HISTORIAL_CACHE = {}; // Cache historial in memory
 
+// ── BITÁCORA (todos los cambios del día) ──────────────────────────────
+let BITACORA_DATA = [];
+
+function openBitacora() {
+  var m = document.getElementById('bitacoraModal');
+  m.style.display = 'flex';
+  document.getElementById('bitacoraBody').innerHTML =
+    '<div style="text-align:center;color:#bbb;padding:30px;font-size:12px">Cargando cambios...</div>';
+  // Órdenes que han tenido movimiento hoy: procesadas + con recepción
+  var conMovimiento = {};
+  Object.keys(PROCESSED_BY || {}).forEach(function(id){ conMovimiento[id] = true; });
+  Object.keys(RECEIVED || {}).forEach(function(id){ conMovimiento[id] = true; });
+  var ids = Object.keys(conMovimiento);
+  document.getElementById('bitacoraSub').textContent =
+    'Cambios del día · ' + STATS.fecha + ' · ' + ids.length + ' órdenes con actividad';
+
+  if(!SCRIPT_URL || ids.length === 0) {
+    BITACORA_DATA = [];
+    renderBitacora();
+    return;
+  }
+
+  BITACORA_DATA = [];
+  var pendientes = ids.length;
+  ids.forEach(function(orderId){
+    // Usar caché si existe; si no, consultar el backend
+    if(HISTORIAL_CACHE[orderId]) {
+      agregarABitacora(orderId, HISTORIAL_CACHE[orderId]);
+      if(--pendientes === 0) renderBitacora();
+      return;
+    }
+    var cbName = 'biubox_bit_' + orderId + '_' + Date.now();
+    var script = document.createElement('script');
+    window[cbName] = function(data){
+      script.remove(); delete window[cbName];
+      if(data && data.historial) {
+        HISTORIAL_CACHE[orderId] = data.historial;
+        agregarABitacora(orderId, data.historial);
+      }
+      if(--pendientes === 0) renderBitacora();
+    };
+    script.onerror = function(){
+      script.remove(); delete window[cbName];
+      if(--pendientes === 0) renderBitacora();
+    };
+    script.src = SCRIPT_URL + '?action=historial&key=' + encodeURIComponent(TODAY_KEY) +
+      '&orderId=' + encodeURIComponent(orderId) + '&callback=' + cbName;
+    document.head.appendChild(script);
+  });
+  // Red de seguridad: si algo se cuelga, renderiza a los 6s
+  setTimeout(function(){ if(pendientes > 0){ pendientes = 0; renderBitacora(); } }, 6000);
+}
+
+function agregarABitacora(orderId, historial) {
+  (historial || []).forEach(function(h){
+    BITACORA_DATA.push({
+      orderId: orderId, nombre: h.nombre || 'Colaborador', email: h.email || '',
+      accion: h.accion || '', hora: h.hora || ''
+    });
+  });
+}
+
+function parseHora(h) {
+  try {
+    if(typeof h === 'string' && h.includes('T')) return new Date(h).getTime();
+    // formato dd/mm/yyyy hh:mm:ss
+    var m = String(h).match(/(\d{2})\/(\d{2})\/(\d{4})[, ]+(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if(m) return new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5], +(m[6]||0)).getTime();
+  } catch(e){}
+  return 0;
+}
+
+function renderBitacora() {
+  var body = document.getElementById('bitacoraBody');
+  var q = (document.getElementById('bitacoraSearch').value || '').toLowerCase().trim();
+  var filtro = document.getElementById('bitacoraFiltro').value;
+
+  var rows = BITACORA_DATA.slice().sort(function(a,b){ return parseHora(b.hora) - parseHora(a.hora); });
+  rows = rows.filter(function(r){
+    if(filtro !== 'TODOS') {
+      if(filtro === 'Recibió') { if(!r.accion.includes('Recibió')) return false; }
+      else if(r.accion !== filtro) return false;
+    }
+    if(q && !((r.orderId + ' ' + r.nombre + ' ' + r.accion + ' ' + r.email).toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  if(rows.length === 0) {
+    body.innerHTML = '<div style="text-align:center;color:#bbb;padding:30px;font-size:12px">Sin cambios registrados hoy</div>';
+    return;
+  }
+
+  body.innerHTML = rows.map(function(h){
+    var icon, bg;
+    if(h.accion === 'Procesado')          { icon='✅'; bg='#00B894'; }
+    else if(h.accion === 'Desprocesado')  { icon='❌'; bg='#D63031'; }
+    else if(h.accion.includes('Recibió')) { icon='📦'; bg='#0084FF'; }
+    else                                  { icon='↩️'; bg='#888'; }
+    var initials = getInitials(h.nombre, h.email);
+    var horaFmt = (function(x){
+      try {
+        if(typeof x === 'string' && x.includes('T') && x.includes('Z'))
+          return new Date(x).toLocaleString('es-MX',{timeZone:'America/Mexico_City',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+        return x;
+      } catch(e){ return x; }
+    })(h.hora);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #f4f5f8">' +
+      '<span style="font-size:15px">' + icon + '</span>' +
+      '<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:'+bg+';color:#fff;font-size:9px;font-weight:700;flex-shrink:0">'+initials+'</span>' +
+      '<div style="min-width:110px"><div style="font-weight:600;color:#2d3436;font-size:12px">'+h.nombre+'</div><div style="color:#aaa;font-size:9px">'+h.email+'</div></div>' +
+      '<span style="color:#555;font-size:12px;flex:1">'+h.accion+'</span>' +
+      '<a href="https://marketplace.liverpool.com.mx/orders/detail/'+h.orderId+'" target="_blank" onclick="event.stopPropagation()" style="color:var(--liv);font-size:11px;font-family:monospace;text-decoration:none;font-weight:600">#'+h.orderId+'</a>' +
+      '<span style="color:#aaa;font-size:10px;white-space:nowrap;min-width:90px;text-align:right">'+horaFmt+'</span>' +
+      '</div>';
+  }).join('');
+}
+
+function closeBitacora() {
+  document.getElementById('bitacoraModal').style.display = 'none';
+}
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') closeBitacora();
+});
+(function(){
+  var m = document.getElementById('bitacoraModal');
+  if(m) m.addEventListener('click', function(e){ if(e.target === m) closeBitacora(); });
+})();
+
 function loadHistorial(orderId) {
   const el = document.getElementById('hist-' + orderId);
   if(!el) return;
@@ -1267,6 +1399,32 @@ function updateSortIcons() {
 
 
 <!-- LOGIN OVERLAY -->
+
+<!-- BITÁCORA MODAL -->
+<div id="bitacoraModal" style="display:none;position:fixed;inset:0;background:rgba(20,25,45,0.55);z-index:9998;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:640px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #eef0f5">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#2d3436">📋 Bitácora de cambios</div>
+        <div id="bitacoraSub" style="font-size:11px;color:#888;margin-top:2px">Cambios del día actual</div>
+      </div>
+      <button onclick="closeBitacora()" style="background:#f2f3f7;border:none;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;color:#666">✕</button>
+    </div>
+    <div style="padding:10px 22px;border-bottom:1px solid #eef0f5;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="bitacoraSearch" oninput="renderBitacora()" placeholder="Filtrar por usuario, orden o acción..."
+        style="flex:1;min-width:180px;padding:7px 12px;border:1.5px solid #e5e7ee;border-radius:8px;font-size:12px;font-family:inherit;outline:none">
+      <select id="bitacoraFiltro" onchange="renderBitacora()" style="padding:7px 10px;border:1.5px solid #e5e7ee;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer">
+        <option value="TODOS">Todas las acciones</option>
+        <option value="Procesado">✅ Procesado</option>
+        <option value="Desprocesado">❌ Desprocesado</option>
+        <option value="Recibió">📦 Recibió</option>
+      </select>
+    </div>
+    <div id="bitacoraBody" style="overflow-y:auto;padding:8px 22px 18px;flex:1">
+      <div style="text-align:center;color:#bbb;padding:30px;font-size:12px">Cargando cambios...</div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
