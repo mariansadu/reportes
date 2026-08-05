@@ -50,6 +50,35 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   padding:6px 32px;display:flex;align-items:center;gap:8px;font-size:11px;color:#ffffff;font-weight:500}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:#00B894;flex-shrink:0}
 .sync-dot.syncing{background:#FDCB6E;animation:pulse 1s infinite}
+.prod-bar{display:flex;align-items:center;gap:20px;padding:14px 32px;transition:background .6s ease,border-color .6s ease;border-bottom:3px solid}
+.prod-left{display:flex;align-items:center;gap:14px;min-width:0}
+.prod-count{font-size:52px;font-weight:800;line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums;transition:color .6s ease}
+.prod-count-label{font-size:11px;line-height:1.3;font-weight:600;opacity:.85}
+.prod-dot-wrap{margin-left:auto;display:flex;align-items:center}
+.prod-dot{width:22px;height:22px;border-radius:50%;transition:background .6s ease,box-shadow .6s ease}
+.prod-right{display:flex;gap:22px;align-items:center}
+.prod-stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+.prod-stat span:first-child{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.prod-stat-lbl{font-size:9px;opacity:.7;font-weight:500;text-transform:uppercase;letter-spacing:.03em}
+/* Semáforo */
+.prod-green{background:linear-gradient(90deg,#EAFBF4,#D5F7EA);border-color:#00B894;color:#0A6E52}
+.prod-green .prod-count{color:#00B894}
+.prod-green .prod-dot{background:#00B894;box-shadow:0 0 0 5px rgba(0,184,148,.18)}
+.prod-yellow{background:linear-gradient(90deg,#FFF9EC,#FEF2D4);border-color:#F0B429;color:#8A6410}
+.prod-yellow .prod-count{color:#E1A417}
+.prod-yellow .prod-dot{background:#F0B429;box-shadow:0 0 0 5px rgba(240,180,41,.2)}
+.prod-red{background:linear-gradient(90deg,#FDEEEE,#FBDDDD);border-color:#D63031;color:#9B1D1E}
+.prod-red .prod-count{color:#D63031}
+.prod-red .prod-dot{background:#D63031;box-shadow:0 0 0 5px rgba(214,48,49,.2);animation:pulse 1.1s infinite}
+.prod-gray{background:#F4F5F8;border-color:#CBD0DC;color:#6B7280}
+.prod-gray .prod-count{color:#9AA2B1}
+.prod-gray .prod-dot{background:#CBD0DC}
+@media(max-width:640px){.prod-count{font-size:40px}.prod-right{gap:12px}.prod-bar{gap:10px;padding:12px 18px}}
+.pausa-btn{border:1.5px solid currentColor;background:rgba(255,255,255,0.6);color:inherit;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s;opacity:.85}
+.pausa-btn:hover{opacity:1;background:#fff}
+.pausa-btn.activa{background:#2D3436;color:#fff;border-color:#2D3436;animation:pausaPulse 1.4s infinite}
+@keyframes pausaPulse{0%,100%{box-shadow:0 0 0 0 rgba(45,52,54,.4)}50%{box-shadow:0 0 0 6px rgba(45,52,54,0)}}
+.prod-paused-overlay{font-size:11px;font-weight:700;opacity:.9}
 .sync-dot.error{background:#D63031}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
@@ -303,7 +332,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div>
         <h1>Procesamiento de Órdenes para BIU SUPPLY</h1>
         <div class="header-date" id="headerDate">04 / Agosto / 2026</div>
-        <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px"><span id="corteLabel">📥 Corte: 04/08/2026 03:35 PM</span> <span style="opacity:0.65;margin-left:6px">· v1.8</span></div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px"><span id="corteLabel">📥 Corte: 04/08/2026 03:35 PM</span> <span style="opacity:0.65;margin-left:6px">· v2.0</span></div>
       </div>
     </div>
     </div>
@@ -318,6 +347,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       style="margin-left:14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);color:#fff;border-radius:7px;padding:4px 11px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px">
       📋 Bitácora
     </button>
+  </div>
+  <div id="prodBar" class="prod-bar prod-gray">
+    <div class="prod-left">
+      <div class="prod-count" id="prodCount">0</div>
+      <div class="prod-count-label">órdenes procesadas<br>en tu sesión de hoy</div>
+    </div>
+    <div class="prod-dot-wrap">
+      <div class="prod-dot" id="prodDot"></div>
+    </div>
+    <button id="pausaBtn" class="pausa-btn" onclick="togglePausa()">
+      <span id="pausaBtnText">☕ En pausa</span>
+    </button>
+    <div class="prod-right" id="prodStats">
+      <div class="prod-stat"><span id="prodRate">0.0</span><span class="prod-stat-lbl">órd/min</span></div>
+      <div class="prod-stat"><span id="prodDead">0</span><span class="prod-stat-lbl">min muertos aprox.</span></div>
+      <div class="prod-stat"><span id="prodPausas">0</span><span class="prod-stat-lbl">pausas (<span id="prodPausaMin">0</span> min)</span></div>
+    </div>
   </div>
 </header>
 
@@ -641,8 +687,124 @@ async function toggleProcessed(orderId, event) {
   }
   pushToServer(PROCESSED, orderId, isNowProcessed);
   btn.classList.remove('syncing-btn');
+  if(isNowProcessed) registrarProductividad();
   updateProgress();
   renderTable();
+}
+
+// ── PRODUCTIVIDAD (contador semáforo, solo sesión local) ───────────────
+// Umbral objetivo: mínimo 5 órdenes cada 10 min (0.5/min). No se muestra.
+const PROD_MIN_POR_VENTANA = 5;
+const PROD_VENTANA_MIN = 10;
+let PROD_SESSION_START = Date.now();
+let PROD_MARKS = [];          // timestamps de cada "procesado" en la sesión
+let PROD_LAST_ACTIVITY = Date.now();
+let PROD_DEAD_MS = 0;         // acumulado de tiempo muerto aproximado
+const PROD_DEAD_GAP_MS = 3 * 60 * 1000; // hueco > 3 min cuenta como muerto
+
+function registrarProductividad() {
+  const now = Date.now();
+  // Si estaba en pausa y procesó, salir de pausa automáticamente
+  if(PROD_EN_PAUSA) togglePausa();
+  // Si el hueco desde la última actividad fue grande, súmalo a tiempo muerto
+  const gap = now - PROD_LAST_ACTIVITY;
+  if(gap > PROD_DEAD_GAP_MS) PROD_DEAD_MS += gap;
+  PROD_LAST_ACTIVITY = now;
+  PROD_MARKS.push(now);
+  updateProductividad();
+}
+
+function updateProductividad() {
+  const bar = document.getElementById('prodBar');
+  if(!bar) return;
+
+  // Pintar contador de pausas siempre
+  const pausasEl = document.getElementById('prodPausas');
+  if(pausasEl) pausasEl.textContent = PROD_PAUSAS_COUNT;
+  const pausaMinEl = document.getElementById('prodPausaMin');
+  if(pausaMinEl) {
+    let totalPausa = PROD_PAUSA_TOTAL_MS;
+    if(PROD_EN_PAUSA) totalPausa += (Date.now() - PROD_PAUSA_INICIO);
+    pausaMinEl.textContent = Math.floor(totalPausa / 60000);
+  }
+
+  // Si está en pausa, no recalculamos ritmo ni color (queda congelado)
+  if(PROD_EN_PAUSA) return;
+
+  const now = Date.now();
+  const total = PROD_MARKS.length;
+  const elapsedMin = Math.max((now - PROD_SESSION_START) / 60000, 0.0001);
+
+  // Ritmo global de la sesión (órdenes por minuto), descontando el tiempo en pausa
+  const activeMin = Math.max((now - PROD_SESSION_START - PROD_PAUSA_TOTAL_MS) / 60000, 0.0001);
+  const rate = total / activeMin;
+
+  // Evaluación del semáforo: órdenes en la ventana reciente vs objetivo.
+  const ventanaInicio = now - PROD_VENTANA_MIN * 60000;
+  const enVentana = PROD_MARKS.filter(t => t >= ventanaInicio).length;
+  const minutosReales = Math.min(activeMin, PROD_VENTANA_MIN);
+  const objetivoProporcional = PROD_MIN_POR_VENTANA * (minutosReales / PROD_VENTANA_MIN);
+
+  // Tiempo muerto: acumulado + hueco abierto actual si ya es grande
+  let deadMs = PROD_DEAD_MS;
+  const gapAbierto = now - PROD_LAST_ACTIVITY;
+  if(gapAbierto > PROD_DEAD_GAP_MS) deadMs += gapAbierto;
+  const deadMin = Math.floor(deadMs / 60000);
+
+  // Pintar números
+  document.getElementById('prodCount').textContent = total.toLocaleString();
+  document.getElementById('prodRate').textContent = rate.toFixed(1);
+  document.getElementById('prodDead').textContent = deadMin;
+
+  // Color del semáforo (sin revelar el umbral)
+  let cls;
+  if(total === 0 && elapsedMin < 2) {
+    cls = 'prod-gray';
+  } else if(enVentana >= objetivoProporcional) {
+    cls = 'prod-green';
+  } else if(enVentana >= objetivoProporcional * 0.6) {
+    cls = 'prod-yellow';
+  } else {
+    cls = 'prod-red';
+  }
+  bar.className = 'prod-bar ' + cls;
+}
+// Refresca cada 20s aunque no haya marcas (para que el color reaccione a la inactividad)
+setInterval(function(){ if(document.getElementById('prodBar')) updateProductividad(); }, 20000);
+
+// ── PAUSA (comida / reunión) ──────────────────────────────────────────
+let PROD_EN_PAUSA = false;
+let PROD_PAUSA_INICIO = 0;
+let PROD_PAUSAS_COUNT = 0;
+let PROD_PAUSA_TOTAL_MS = 0;
+
+function togglePausa() {
+  const btn = document.getElementById('pausaBtn');
+  const txt = document.getElementById('pausaBtnText');
+  const now = Date.now();
+  if(!PROD_EN_PAUSA) {
+    // Entrar en pausa
+    PROD_EN_PAUSA = true;
+    PROD_PAUSA_INICIO = now;
+    // Cerrar cualquier hueco muerto abierto hasta este momento
+    PROD_LAST_ACTIVITY = now;
+    btn.classList.add('activa');
+    txt.textContent = '▶ Reanudar';
+    document.getElementById('prodBar').className = 'prod-bar prod-gray';
+    document.getElementById('prodCount').textContent = '⏸';
+  } else {
+    // Salir de pausa
+    PROD_EN_PAUSA = false;
+    const dur = now - PROD_PAUSA_INICIO;
+    PROD_PAUSA_TOTAL_MS += dur;
+    PROD_PAUSAS_COUNT += 1;
+    // El tiempo de pausa NO cuenta como muerto: reiniciamos el reloj de actividad
+    PROD_LAST_ACTIVITY = now;
+    btn.classList.remove('activa');
+    txt.textContent = '☕ En pausa';
+    document.getElementById('prodCount').textContent = PROD_MARKS.length.toLocaleString();
+    updateProductividad();
+  }
 }
 
 // ── PROGRESS ──────────────────────────────────────────────────────────
@@ -712,6 +874,15 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 function startApp() {
+  PROD_SESSION_START = Date.now();
+  PROD_LAST_ACTIVITY = Date.now();
+  PROD_MARKS = [];
+  PROD_DEAD_MS = 0;
+  PROD_EN_PAUSA = false;
+  PROD_PAUSA_INICIO = 0;
+  PROD_PAUSAS_COUNT = 0;
+  PROD_PAUSA_TOTAL_MS = 0;
+  updateProductividad();
   if(SCRIPT_URL) {
     syncFromServer();
     if(syncInterval) clearInterval(syncInterval);
