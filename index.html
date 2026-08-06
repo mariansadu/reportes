@@ -381,7 +381,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div>
         <h1>Procesamiento de Órdenes para BIU SUPPLY</h1>
         <div class="header-date" id="headerDate">06 / Agosto / 2026</div>
-        <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px"><span id="corteLabel">📥 Corte: 06/08/2026 08:25 AM</span> <span style="opacity:0.65;margin-left:6px">· v2.3</span></div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px"><span id="corteLabel">📥 Corte: 06/08/2026 08:25 AM</span> <span style="opacity:0.65;margin-left:6px">· v2.2</span></div>
       </div>
     </div>
     </div>
@@ -1104,8 +1104,6 @@ function cierreEnviar(){
 
 // ── REPARTO POR MESAS ─────────────────────────────────────────────────
 const MESAS_MAX = 6;
-// Mesas operando hoy. Se inyecta en cada corte diario; 0 = sin reparto automático.
-const MESAS_DIA = 0;
 let MESAS_N = 0;                 // mesas activas (0 = sin reparto)
 let MESAS_ASIGNACION = {};       // {orderId: nMesa}
 let MESA_FILTER = 'ALL';
@@ -1151,14 +1149,6 @@ function resumenReparto(asign, n){
     filas.push(row);
   }
   return filas;
-}
-
-function aplicarRepartoDelDia(){
-  if(!MESAS_DIA || MESAS_DIA < 1 || MESAS_DIA > MESAS_MAX) return;
-  MESAS_N = MESAS_DIA;
-  MESAS_ASIGNACION = calcularReparto(MESAS_N, false);
-  MESA_FILTER = 'ALL';
-  pintarMesaBar();
 }
 
 function abrirMesas(){
@@ -1226,8 +1216,6 @@ function pintarMesaBar(){
     return '<button class="mesa-pill' + (MESA_FILTER === f.mesa ? ' active' : '') + '" onclick="filtrarMesa(' + f.mesa + ')">' +
            'Mesa ' + f.mesa + '<small>' + f.total + ' órdenes</small></button>';
   }).join('');
-  if(MESAS_DIA && MESAS_N === MESAS_DIA)
-    h += '<span style="font-size:10px;color:#8079b8;margin-left:4px">repartido en el corte de hoy</span>';
   document.getElementById('mesaPills').innerHTML = h;
   bar.classList.add('on');
 }
@@ -1287,8 +1275,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Load local state immediately
   const local = localStorage.getItem(TODAY_KEY);
   if(local) PROCESSED = new Set(JSON.parse(local));
-
-  aplicarRepartoDelDia();
 
   updateProgress(); renderTable();
 
