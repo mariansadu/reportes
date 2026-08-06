@@ -81,17 +81,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .cierre-btn{border:1.5px solid currentColor;background:rgba(255,255,255,0.6);color:inherit;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s;opacity:.85;margin-left:8px}
 .cierre-btn:hover{opacity:1;background:#fff}
 .cierre-btn.cerrada{background:#2D3436;color:#fff;border-color:#2D3436}
-.mesa-badge{display:inline-block;margin-right:5px;background:#EEF2FF;color:#4834d4;border:1px solid #C7D0FF;border-radius:5px;padding:1px 5px;font-size:9px;font-weight:700;vertical-align:middle}
-.mesa-bar{display:none;align-items:center;gap:7px;flex-wrap:wrap;margin:0 0 12px;padding:9px 13px;background:#F4F3FF;border:1px solid #E0DCFF;border-radius:11px}
-.mesa-bar.on{display:flex}
-.mesa-bar .mb-lbl{font-size:11px;font-weight:700;color:#4834d4;text-transform:uppercase;letter-spacing:.05em}
-.mesa-pill{border:1.5px solid #D5D0FF;background:#fff;color:#4834d4;border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
-.mesa-pill.active{background:#4834d4;color:#fff;border-color:#4834d4}
-.mesa-pill small{display:block;font-weight:600;font-size:9px;opacity:.75}
-.mz-count{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
-.mz-num{width:44px;height:44px;border:2px solid #D5D0FF;background:#fff;color:#4834d4;border-radius:11px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit}
-.mz-num.active{background:#4834d4;color:#fff;border-color:#4834d4}
-.mz-chk{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#555;margin-bottom:14px}
 .cz-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center;padding:20px}
 .cz-overlay.open{display:flex}
 .cz-modal{background:#fff;border-radius:16px;width:100%;max-width:760px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit}
@@ -381,7 +370,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div>
         <h1>Procesamiento de Órdenes para BIU SUPPLY</h1>
         <div class="header-date" id="headerDate">06 / Agosto / 2026</div>
-        <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px"><span id="corteLabel">📥 Corte: 06/08/2026 08:25 AM</span> <span style="opacity:0.65;margin-left:6px">· v2.2</span></div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px"><span id="corteLabel">📥 Corte: 06/08/2026 08:25 AM</span> <span style="opacity:0.65;margin-left:6px">· v2.1</span></div>
       </div>
     </div>
     </div>
@@ -447,7 +436,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
     </div>
     <button class="export-btn" onclick="exportProcessed()">⬇️ Exportar procesados</button>
-    <button class="export-btn" onclick="abrirMesas()" style="margin-left:8px">🪑 Repartir mesas</button>
   </div>
 
   <!-- KPI CARDS -->
@@ -523,12 +511,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="filter-chip chip-pendiente" onclick="filterByStatus('PENDIENTE',this)" id="chip-PENDIENTE">⏳ Pendientes</div>
     <div class="filter-chip chip-procesado" onclick="filterByStatus('PROCESADO',this)" id="chip-PROCESADO">✅ Procesados</div>
     <div class="results-count"><b id="countLabel">0</b> pedidos</div>
-  </div>
-
-  <div class="mesa-bar" id="mesaBar">
-    <span class="mb-lbl">Mesa:</span>
-    <div id="mesaPills" style="display:flex;gap:7px;flex-wrap:wrap"></div>
-    <button class="mesa-pill" onclick="limpiarMesas()" style="margin-left:auto;border-color:#eee;color:#888">✕ Quitar reparto</button>
   </div>
 
   <div class="search-bar-row">
@@ -1102,168 +1084,6 @@ function cierreEnviar(){
   cerrarCierre();
 }
 
-// ── REPARTO POR MESAS ─────────────────────────────────────────────────
-const MESAS_MAX = 6;
-let MESAS_N = 0;                 // mesas activas (0 = sin reparto)
-let MESAS_ASIGNACION = {};       // {orderId: nMesa}
-let MESA_FILTER = 'ALL';
-let MZ_PREVIEW_N = 3;
-const PRIOS = ['VENCIDO','P1','P2','P3','P4','P5'];
-
-function mesaBadge(id){
-  const m = MESAS_ASIGNACION[id];
-  return m ? '<span class="mesa-badge" title="Mesa asignada">M' + m + '</span>' : '';
-}
-
-// Reparto determinista: mismo número de mesas => mismo resultado en todos los
-// navegadores, sin necesidad de que el backend sincronice nada.
-function calcularReparto(n, soloPendientes){
-  const asign = {};
-  let offset = 0;
-  PRIOS.forEach(function(g){
-    const lista = ALL_ORDERS
-      .filter(function(o){
-        if(o.prioridad !== g) return false;
-        if(soloPendientes && PROCESSED.has(o.id)) return false;
-        return true;
-      })
-      .sort(function(a,b){ return (a.dias - b.dias) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
-    lista.forEach(function(o,i){ asign[o.id] = ((i + offset) % n) + 1; });
-    offset = (offset + lista.length) % n;   // el sobrante rota a la siguiente prioridad
-  });
-  return asign;
-}
-
-function resumenReparto(asign, n){
-  const filas = [];
-  for(let m=1; m<=n; m++){
-    const ids = Object.keys(asign).filter(function(id){ return asign[id] === m; });
-    const ords = ids.map(function(id){ return ALL_ORDERS.find(function(o){ return o.id === id; }); }).filter(Boolean);
-    const row = {mesa: m, total: ords.length, BS: 0, PB: 0, nuevos: 0};
-    PRIOS.forEach(function(p){ row[p] = 0; });
-    ords.forEach(function(o){
-      row[o.prioridad] = (row[o.prioridad] || 0) + 1;
-      if(o.tienda === 'BS') row.BS++; else if(o.tienda === 'PB') row.PB++;
-      if(o.nuevo) row.nuevos++;
-    });
-    filas.push(row);
-  }
-  return filas;
-}
-
-function abrirMesas(){
-  MZ_PREVIEW_N = MESAS_N || 3;
-  document.getElementById('mzCount').innerHTML = Array.from({length: MESAS_MAX}, function(_,i){
-    const n = i + 1;
-    return '<button class="mz-num' + (n === MZ_PREVIEW_N ? ' active' : '') + '" onclick="setMesasPreview(' + n + ')">' + n + '</button>';
-  }).join('');
-  previewMesas();
-  document.getElementById('mesaOverlay').classList.add('open');
-}
-function cerrarMesas(){ document.getElementById('mesaOverlay').classList.remove('open'); }
-
-function setMesasPreview(n){
-  MZ_PREVIEW_N = n;
-  document.querySelectorAll('#mzCount .mz-num').forEach(function(b,i){ b.classList.toggle('active', i + 1 === n); });
-  previewMesas();
-}
-
-function previewMesas(){
-  const solo = document.getElementById('mzSoloPend').checked;
-  const asign = calcularReparto(MZ_PREVIEW_N, solo);
-  const filas = resumenReparto(asign, MZ_PREVIEW_N);
-  const total = filas.reduce(function(a,f){ return a + f.total; }, 0);
-  document.getElementById('mzRows').innerHTML = filas.map(function(f){
-    return '<tr><td><b>Mesa ' + f.mesa + '</b></td><td><b>' + f.total + '</b></td>' +
-      PRIOS.map(function(p){ return '<td>' + (f[p] || 0) + '</td>'; }).join('') +
-      '<td>' + f.BS + '</td><td>' + f.PB + '</td><td>' + f.nuevos + '</td></tr>';
-  }).join('');
-  const min = Math.min.apply(null, filas.map(function(f){ return f.total; }));
-  const max = Math.max.apply(null, filas.map(function(f){ return f.total; }));
-  document.getElementById('mzNote').innerHTML =
-    '<b>' + total.toLocaleString() + '</b> órdenes entre <b>' + MZ_PREVIEW_N + '</b> mesa(s): ' +
-    (min === max ? min + ' cada una.' : 'entre ' + min + ' y ' + max + ' por mesa (diferencia de ' + (max - min) + ').') +
-    '<br>Cada prioridad se reparte por separado, así que ninguna mesa carga sola con los vencidos ni con los P1. ' +
-    'El reparto es determinista: si todos eligen el mismo número de mesas, a todos les toca exactamente la misma división, ' +
-    'aunque el servidor no esté sincronizando.';
-}
-
-function aplicarMesas(){
-  const solo = document.getElementById('mzSoloPend').checked;
-  MESAS_N = MZ_PREVIEW_N;
-  MESAS_ASIGNACION = calcularReparto(MESAS_N, solo);
-  MESA_FILTER = 'ALL';
-  pintarMesaBar();
-  cerrarMesas();
-  currentPage = 1;
-  renderTable();
-}
-
-function limpiarMesas(){
-  MESAS_N = 0; MESAS_ASIGNACION = {}; MESA_FILTER = 'ALL';
-  pintarMesaBar();
-  currentPage = 1;
-  renderTable();
-}
-
-function pintarMesaBar(){
-  const bar = document.getElementById('mesaBar');
-  if(!bar) return;
-  if(!MESAS_N){ bar.classList.remove('on'); return; }
-  const filas = resumenReparto(MESAS_ASIGNACION, MESAS_N);
-  let h = '<button class="mesa-pill' + (MESA_FILTER === 'ALL' ? ' active' : '') + '" onclick="filtrarMesa(\'ALL\')">Todas</button>';
-  h += filas.map(function(f){
-    return '<button class="mesa-pill' + (MESA_FILTER === f.mesa ? ' active' : '') + '" onclick="filtrarMesa(' + f.mesa + ')">' +
-           'Mesa ' + f.mesa + '<small>' + f.total + ' órdenes</small></button>';
-  }).join('');
-  document.getElementById('mesaPills').innerHTML = h;
-  bar.classList.add('on');
-}
-
-function filtrarMesa(m){
-  MESA_FILTER = m;
-  currentPage = 1;
-  pintarMesaBar();
-  renderTable();
-}
-
-function mesasExcel(){
-  const solo = document.getElementById('mzSoloPend').checked;
-  const n = MZ_PREVIEW_N;
-  const asign = calcularReparto(n, solo);
-  const filas = resumenReparto(asign, n);
-  const td = function(t){ return '<td style="mso-number-format:\'\\@\';border:1px solid #ccc">' + czEsc(t) + '</td>'; };
-  const th = function(t){ return '<th style="background:#EDEBFF;border:1px solid #999">' + czEsc(t) + '</th>'; };
-  let h = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>';
-  h += '<table><tr><td colspan="2"><b>Reparto de la operación por mesas</b></td></tr>' +
-       '<tr><td>Fecha</td>' + td(new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'})) + '</tr>' +
-       '<tr><td>Mesas</td>' + td(n) + '</tr>' +
-       '<tr><td>Alcance</td>' + td(solo ? 'Solo órdenes pendientes' : 'Todas las órdenes del corte') + '</tr></table><br>';
-  h += '<table><tr>' + ['Mesa','Total','Vencidos','P1','P2','P3','P4','P5','BS','PB','Nuevos'].map(th).join('') + '</tr>';
-  filas.forEach(function(f){
-    h += '<tr>' + [f.mesa, f.total].concat(PRIOS.map(function(p){ return f[p] || 0; })).concat([f.BS, f.PB, f.nuevos]).map(td).join('') + '</tr>';
-  });
-  h += '</table><br><table><tr>' + ['Mesa','Pedido','Tienda','SKU','Producto','Marca','Prioridad','Días','Transportista','Guía','Nuevo'].map(th).join('') + '</tr>';
-  const asignados = Object.keys(asign).map(function(id){
-    const o = ALL_ORDERS.find(function(x){ return x.id === id; });
-    return o ? {m: asign[id], o: o} : null;
-  }).filter(Boolean).sort(function(a,b){
-    return (a.m - b.m) || (PRIOS.indexOf(a.o.prioridad) - PRIOS.indexOf(b.o.prioridad)) || (a.o.dias - b.o.dias);
-  });
-  asignados.forEach(function(r){
-    const o = r.o;
-    h += '<tr>' + ['Mesa ' + r.m, o.id, o.tienda, o.sku, o.producto, o.marca, o.prioridad, o.dias_label,
-                   o.transportista, o.guia, o.nuevo ? 'Sí' : 'No'].map(td).join('') + '</tr>';
-  });
-  h += '</table></body></html>';
-  const blob = new Blob(['\ufeff' + h], {type:'application/vnd.ms-excel;charset=utf-8'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'reparto_mesas_' + n + '_' + new Date().toISOString().slice(0,10) + '.xls';
-  a.click();
-  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
-}
-
 // ── INIT ──────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   const json = await decompress(B64);
@@ -1449,7 +1269,6 @@ function getFiltered() {
     if(activeFilter==='MULTI') { if(!o.multi) return false; }
     else if(activeFilter==='NUEVOS') { if(!o.nuevo) return false; }
     else if(activeFilter!=='ALL'&&o.prioridad!==activeFilter) return false;
-    if(MESA_FILTER!=='ALL' && MESAS_ASIGNACION[o.id]!==MESA_FILTER) return false;
     if(statusFilter==='PENDIENTE'&&PROCESSED.has(o.id)) return false;
     if(statusFilter==='PROCESADO'&&!PROCESSED.has(o.id)) return false;
     if(searchTerm){
@@ -1739,7 +1558,7 @@ function renderTable() {
             ${imgCells(o.items, o.id)}
           </div>
         </td>
-        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.producto}">${mesaBadge(o.id)}${multiBadge}${nuevoBadge}${o.producto}</td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.producto}">${multiBadge}${nuevoBadge}${o.producto}</td>
         <td>${o.marca||'—'}</td>
         <td><span class="mono" style="font-size:10px">${o.sku}</span></td>
         <td style="text-align:center;font-weight:600">${o.cantidad}</td>
@@ -2053,35 +1872,6 @@ function updateSortIcons() {
   </div>
 </div>
 
-
-<!-- ── REPARTO POR MESAS ─────────────────────────────────────────── -->
-<div class="cz-overlay" id="mesaOverlay" onclick="if(event.target===this)cerrarMesas()">
-  <div class="cz-modal">
-    <div class="cz-head">
-      <span style="font-size:18px">🪑</span>
-      <h3>Repartir la operación entre mesas</h3>
-      <button class="cz-x" onclick="cerrarMesas()">✕</button>
-    </div>
-    <div class="cz-body">
-      <div style="font-size:11.5px;color:#666;margin-bottom:9px">¿Con cuántas mesas operamos hoy?</div>
-      <div class="mz-count" id="mzCount"></div>
-      <label class="mz-chk"><input type="checkbox" id="mzSoloPend" checked onchange="previewMesas()">
-        Repartir solo las órdenes pendientes (excluye lo ya procesado)</label>
-      <div class="cz-scroll" style="max-height:280px">
-        <table class="cz-tbl">
-          <thead><tr><th>Mesa</th><th>Total</th><th>🔴 Venc.</th><th>🟠 P1</th><th>🟡 P2</th><th>🔵 P3</th><th>🟢 P4</th><th>⚪ P5</th><th>BS</th><th>PB</th><th>✨ Nuevos</th></tr></thead>
-          <tbody id="mzRows"></tbody>
-        </table>
-      </div>
-      <div class="cz-note" id="mzNote"></div>
-    </div>
-    <div class="cz-foot">
-      <button class="cz-btn sec" onclick="cerrarMesas()">Cancelar</button>
-      <button class="cz-btn xls" onclick="mesasExcel()">📊 Excel del reparto</button>
-      <button class="cz-btn mail" onclick="aplicarMesas()">✅ Aplicar reparto</button>
-    </div>
-  </div>
-</div>
 
 <div id="printArea"></div>
 </body>
